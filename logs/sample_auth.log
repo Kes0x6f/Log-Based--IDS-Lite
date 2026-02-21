@@ -1,0 +1,25 @@
+Jan 25 09:58:12 server1 systemd-logind[682]: New session 1 of user root.
+Jan 25 09:58:12 server1 systemd-logind[682]: Removed session 1.
+Jan 25 10:01:03 server1 sshd[1023]: Server listening on 0.0.0.0 port 22.
+Jan 25 10:01:03 server1 sshd[1023]: Server listening on :: port 22.
+Jan 25 10:14:01 server1 sshd[1234]: Failed password for invalid user admin from 192.168.1.50 port 54321 ssh2
+Jan 25 10:14:05 server1 sshd[1234]: Failed password for invalid user admin from 192.168.1.50 port 54322 ssh2
+Jan 25 10:14:09 server1 sshd[1234]: Failed password for invalid user admin from 192.168.1.50 port 54323 ssh2
+Jan 25 10:14:12 server1 sshd[1234]: Failed password for invalid user admin from 192.168.1.50 port 54324 ssh2
+Jan 25 10:14:15 server1 sshd[1234]: Failed password for invalid user admin from 192.168.1.50 port 54325 ssh2
+Jan 25 10:14:20 server1 sshd[1234]: Failed password for user1 from 192.168.1.50 port 54326 ssh2
+Jan 25 10:14:25 server1 sshd[1234]: Accepted password for user1 from 192.168.1.50 port 54326 ssh2
+Jan 25 10:14:25 server1 systemd-logind[682]: New session 3 of user user1.
+Jan 25 10:20:01 server1 sshd[1300]: Accepted password for root from 10.0.0.8 port 44444 ssh2
+Jan 25 10:20:01 server1 systemd-logind[682]: New session 4 of user root.
+Jan 25 10:25:33 server1 sshd[1355]: Invalid user test from 203.0.113.45 port 60234
+Jan 25 10:25:36 server1 sshd[1355]: Invalid user oracle from 203.0.113.45 port 60235
+Jan 25 10:25:40 server1 sshd[1355]: Connection closed by invalid user oracle 203.0.113.45 port 60235 [preauth]
+Jan 25 10:30:00 server1 sudo: user1 : TTY=pts/0 ; PWD=/home/user1 ; USER=root ; COMMAND=/bin/ls
+Jan 25 10:30:05 server1 sudo: user1 : authentication failure ; TTY=pts/0 ; PWD=/home/user1 ; USER=root ; COMMAND=/bin/bash
+Jan 25 10:30:10 server1 sudo: user1 : authentication failure ; TTY=pts/0 ; PWD=/home/user1 ; USER=root ; COMMAND=/bin/bash
+Jan 25 10:30:15 server1 sudo: user1 : authentication failure ; TTY=pts/0 ; PWD=/home/user1 ; USER=root ; COMMAND=/bin/bash
+Jan 25 10:40:00 server1 su: (to root) user1 on pts/1
+Jan 25 11:00:00 server1 systemd-logind[682]: Session 3 logged out. Waiting for processes to exit.
+Jan 25 11:00:02 server1 systemd-logind[682]: Removed session 3.
+Jan 25 11:05:45 server1 sshd[1500]: Connection closed by authenticating user root 10.0.0.8 port 44444 [preauth]
