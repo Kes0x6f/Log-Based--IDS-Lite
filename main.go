@@ -2,21 +2,23 @@ package main
 
 import (
 	"fmt"
-	"log"
 
-	"github.com/Kes0x6f/Log-Based--IDS/internal/filehandler"
+	authEngine "github.com/Kes0x6f/Log-Based--IDS/internal/detection"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/parser"
 )
 
 func main() {
-	file, err := filehandler.OpenFile("logs/sample_auth.log")
 
-	if err != nil {
-		log.Fatal(err)
-	}
-	events := parser.AuthLogParser(file)
+	p := parser.GetParser("auth")
+	events, _ := p.Parse("logs/sample_auth.log")
 
 	for _, e := range events {
 		fmt.Println(*e)
+	}
+
+	detectedAlerts := authEngine.AuthEngine(events)
+
+	for _, alert := range detectedAlerts {
+		fmt.Println(alert)
 	}
 }

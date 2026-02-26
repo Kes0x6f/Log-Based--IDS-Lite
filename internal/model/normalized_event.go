@@ -5,16 +5,14 @@ import (
 )
 
 type NormalizedEvent struct {
-	Timestamp     time.Time
-	Host          string
-	LogSource     string
-	Program       string
-	EventType     string
-	Username      string
-	SourceIP      string
-	Port          string
-	DestinationIP string
-	Success       bool
-	Message       string
-	RawLine       string
+	Timestamp time.Time
+	Host      string
+	LogSource string
+	Program   string
+	EventType string
+	Username  string
+	SourceIP  string
+	Port      string
+	Message   string
+	RawLine   string
 }
