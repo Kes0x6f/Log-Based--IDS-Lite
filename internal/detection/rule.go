@@ -6,5 +6,5 @@ import (
 )
 
 type Rule interface {
-	Evaluate(event *model.NormalizedEvent, state *context.DetectionContext) []string
+	Evaluate(event *model.NormalizedEvent, state *context.DetectionContext) []*model.Alert
 }

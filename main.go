@@ -13,10 +13,6 @@ func main() {
 	p := parser.GetParser("auth")
 	events, _ := p.Parse("logs/sample_auth.log")
 
-	for _, e := range events {
-		fmt.Println(*e)
-	}
-
 	engine := detection.NewEngine([]detection.Rule{
 		rule.NewSSHRule(),
 	})

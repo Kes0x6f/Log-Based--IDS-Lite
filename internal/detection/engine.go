@@ -15,10 +15,10 @@ func NewEngine(rules []Rule) *Engine {
 		Rules: rules,
 		State: context.NewDetectionContext(),
 	}
-
 }
-func (e *Engine) Process(events []*model.NormalizedEvent) []string {
-	var alerts []string
+
+func (e *Engine) Process(events []*model.NormalizedEvent) []*model.Alert {
+	var alerts []*model.Alert
 	for _, event := range events {
 		for _, rule := range e.Rules {
 			if alert := rule.Evaluate(event, e.State); alert != nil {

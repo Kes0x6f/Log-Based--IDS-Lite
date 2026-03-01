@@ -3,16 +3,24 @@ package context
 import "time"
 
 type SSHState struct {
-	FailedByIP      map[string][]time.Time
-	FailedUsersByIP map[string]map[string]time.Time
-	RecentFailures  map[string][]time.Time
+	FailedByIP               map[string][]time.Time
+	FailedUsersByIP          map[string]map[string]time.Time
+	RecentFailures           map[string][]time.Time
+	LastBruteForceAlert      map[string]time.Time
+	LastRootTargetAlert      map[string]time.Time
+	LastEnumerationAlert     map[string]time.Time
+	LastSuspiciousLoginAlert map[string]time.Time
 }
 
 func NewSSHState() *SSHState {
 	return &SSHState{
-		FailedByIP:      make(map[string][]time.Time),
-		FailedUsersByIP: make(map[string]map[string]time.Time),
-		RecentFailures:  make(map[string][]time.Time),
+		FailedByIP:               make(map[string][]time.Time),
+		FailedUsersByIP:          make(map[string]map[string]time.Time),
+		RecentFailures:           make(map[string][]time.Time),
+		LastBruteForceAlert:      make(map[string]time.Time),
+		LastEnumerationAlert:     make(map[string]time.Time),
+		LastRootTargetAlert:      make(map[string]time.Time),
+		LastSuspiciousLoginAlert: make(map[string]time.Time),
 	}
 }
 
