@@ -1,25 +1,65 @@
-Jan 25 09:58:12 server1 systemd-logind[682]: New session 1 of user root.
-Jan 25 09:58:12 server1 systemd-logind[682]: Removed session 1.
-Jan 25 10:01:03 server1 sshd[1023]: Server listening on 0.0.0.0 port 22.
-Jan 25 10:01:03 server1 sshd[1023]: Server listening on :: port 22.
-Jan 25 10:14:01 server1 sshd[1234]: Failed password for invalid user admin from 192.168.1.50 port 54321 ssh2
-Jan 25 10:14:05 server1 sshd[1234]: Failed password for invalid user admin from 192.168.1.50 port 54322 ssh2
-Jan 25 10:14:09 server1 sshd[1234]: Failed password for invalid user admin from 192.168.1.50 port 54323 ssh2
-Jan 25 10:14:12 server1 sshd[1234]: Failed password for invalid user admin from 192.168.1.50 port 54324 ssh2
-Jan 25 10:14:15 server1 sshd[1234]: Failed password for invalid user admin from 192.168.1.50 port 54325 ssh2
-Jan 25 10:14:20 server1 sshd[1234]: Failed password for user1 from 192.168.1.50 port 54326 ssh2
-Jan 25 10:14:25 server1 sshd[1234]: Accepted password for user1 from 192.168.1.50 port 54326 ssh2
-Jan 25 10:14:25 server1 systemd-logind[682]: New session 3 of user user1.
-Jan 25 10:20:01 server1 sshd[1300]: Accepted password for root from 10.0.0.8 port 44444 ssh2
-Jan 25 10:20:01 server1 systemd-logind[682]: New session 4 of user root.
-Jan 25 10:25:33 server1 sshd[1355]: Invalid user test from 203.0.113.45 port 60234
-Jan 25 10:25:36 server1 sshd[1355]: Invalid user oracle from 203.0.113.45 port 60235
-Jan 25 10:25:40 server1 sshd[1355]: Connection closed by invalid user oracle 203.0.113.45 port 60235 [preauth]
-Jan 25 10:30:00 server1 sudo: user1 : TTY=pts/0 ; PWD=/home/user1 ; USER=root ; COMMAND=/bin/ls
-Jan 25 10:30:05 server1 sudo: user1 : authentication failure ; TTY=pts/0 ; PWD=/home/user1 ; USER=root ; COMMAND=/bin/bash
-Jan 25 10:30:10 server1 sudo: user1 : authentication failure ; TTY=pts/0 ; PWD=/home/user1 ; USER=root ; COMMAND=/bin/bash
-Jan 25 10:30:15 server1 sudo: user1 : authentication failure ; TTY=pts/0 ; PWD=/home/user1 ; USER=root ; COMMAND=/bin/bash
-Jan 25 10:40:00 server1 su: (to root) user1 on pts/1
-Jan 25 11:00:00 server1 systemd-logind[682]: Session 3 logged out. Waiting for processes to exit.
-Jan 25 11:00:02 server1 systemd-logind[682]: Removed session 3.
-Jan 25 11:05:45 server1 sshd[1500]: Connection closed by authenticating user root 10.0.0.8 port 44444 [preauth]
+# --------------------------------------------
+# NORMAL SSH LOGIN (NO ALERT)
+# --------------------------------------------
+Jan 25 10:00:01 server1 sshd[1001]: Accepted password for maria from 192.168.1.50 port 51234 ssh2
+
+# --------------------------------------------
+# SSH BRUTE FORCE TEST (5 FAILS WITHIN 2 MIN)
+# Should trigger: SSH Brute Force
+# --------------------------------------------
+Jan 25 10:01:01 server1 sshd[1002]: Failed password for invalid user admin from 192.168.1.10 port 50001 ssh2
+Jan 25 10:01:20 server1 sshd[1003]: Failed password for invalid user test from 192.168.1.10 port 50002 ssh2
+Jan 25 10:01:40 server1 sshd[1004]: Failed password for root from 192.168.1.10 port 50003 ssh2
+Jan 25 10:02:00 server1 sshd[1005]: Failed password for invalid user guest from 192.168.1.10 port 50004 ssh2
+Jan 25 10:02:15 server1 sshd[1006]: Failed password for root from 192.168.1.10 port 50005 ssh2
+
+# --------------------------------------------
+# INSIDE COOLDOWN (SHOULD NOT RE-ALERT BRUTE FORCE)
+# --------------------------------------------
+Jan 25 10:02:30 server1 sshd[1007]: Failed password for root from 192.168.1.10 port 50006 ssh2
+Jan 25 10:02:45 server1 sshd[1008]: Failed password for root from 192.168.1.10 port 50007 ssh2
+
+# --------------------------------------------
+# AFTER COOLDOWN (WAIT > 2 MIN)
+# Should trigger Brute Force AGAIN
+# --------------------------------------------
+Jan 25 10:05:01 server1 sshd[1009]: Failed password for invalid user admin from 192.168.1.10 port 50008 ssh2
+Jan 25 10:05:20 server1 sshd[1010]: Failed password for invalid user test from 192.168.1.10 port 50009 ssh2
+Jan 25 10:05:40 server1 sshd[1011]: Failed password for root from 192.168.1.10 port 50010 ssh2
+Jan 25 10:06:00 server1 sshd[1012]: Failed password for invalid user guest from 192.168.1.10 port 50011 ssh2
+Jan 25 10:06:10 server1 sshd[1013]: Failed password for root from 192.168.1.10 port 50012 ssh2
+
+# --------------------------------------------
+# USERNAME ENUMERATION TEST (5 DIFFERENT USERS)
+# Should trigger: SSH Username Enumeration
+# --------------------------------------------
+Jan 25 10:07:01 server1 sshd[1014]: Failed password for invalid user oracle from 192.168.1.20 port 50101 ssh2
+Jan 25 10:07:10 server1 sshd[1015]: Failed password for invalid user postgres from 192.168.1.20 port 50102 ssh2
+Jan 25 10:07:20 server1 sshd[1016]: Failed password for invalid user admin from 192.168.1.20 port 50103 ssh2
+Jan 25 10:07:30 server1 sshd[1017]: Failed password for invalid user test from 192.168.1.20 port 50104 ssh2
+Jan 25 10:07:40 server1 sshd[1018]: Failed password for invalid user backup from 192.168.1.20 port 50105 ssh2
+
+# --------------------------------------------
+# ROOT TARGETING TEST
+# Should trigger SSH Root Targeting EACH TIME (flood test)
+# --------------------------------------------
+Jan 25 10:08:01 server1 sshd[1019]: Failed password for root from 192.168.1.30 port 50201 ssh2
+Jan 25 10:08:05 server1 sshd[1020]: Failed password for root from 192.168.1.30 port 50202 ssh2
+Jan 25 10:08:10 server1 sshd[1021]: Failed password for root from 192.168.1.30 port 50203 ssh2
+
+# --------------------------------------------
+# SUCCESS AFTER MULTIPLE FAILURES
+# Should trigger SSH Suspicious Login
+# --------------------------------------------
+Jan 25 10:09:01 server1 sshd[1022]: Failed password for maria from 192.168.1.40 port 50301 ssh2
+Jan 25 10:09:10 server1 sshd[1023]: Failed password for maria from 192.168.1.40 port 50302 ssh2
+Jan 25 10:09:20 server1 sshd[1024]: Failed password for maria from 192.168.1.40 port 50303 ssh2
+Jan 25 10:09:40 server1 sshd[1025]: Accepted password for maria from 192.168.1.40 port 50304 ssh2
+
+# --------------------------------------------
+# OTHER AUTH EVENTS (NO ALERT)
+# --------------------------------------------
+Jan 25 10:10:01 server1 sudo:    maria : TTY=pts/0 ; PWD=/home/maria ; USER=root ; COMMAND=/usr/bin/apt update
+Jan 25 10:10:02 server1 sudo: pam_unix(sudo:session): session opened for user root by maria(uid=0)
+Jan 25 10:10:10 server1 sudo: pam_unix(sudo:session): session closed for user root
+Jan 25 10:11:01 server1 sshd[1026]: Connection closed by 192.168.1.50 port 51234 [preauth]

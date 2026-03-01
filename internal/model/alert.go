@@ -1,8 +1,9 @@
 package model
 
 import (
-	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Severity string
@@ -55,5 +56,5 @@ func NewAlert(
 }
 
 func GenerateID() string {
-	return fmt.Sprintf("ALT-%d", time.Now().UnixNano())
+	return "ALT-" + uuid.New().String()
 }

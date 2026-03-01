@@ -9,9 +9,6 @@ import (
 )
 
 type SSHRule struct {
-	RuleName string
-	Severity string
-
 	BruteForceThreshold    int
 	BruteForceWindow       time.Duration
 	EnumerationThreshold   int
@@ -21,9 +18,6 @@ type SSHRule struct {
 
 func NewSSHRule() *SSHRule {
 	return &SSHRule{
-		RuleName: "SSH ",
-		Severity: "HIGH",
-
 		BruteForceThreshold:    5,
 		BruteForceWindow:       2 * time.Minute,
 		EnumerationThreshold:   5,
@@ -101,6 +95,8 @@ func (r *SSHRule) Evaluate(event *model.NormalizedEvent, context *context.Detect
 			s.RecentFailures[ip] = append(s.RecentFailures[ip], now)
 			s.RecentFailures[ip] = s.PruneOld(s.RecentFailures[ip], now, r.SuccessAfterFailWindow)
 
+			s.RootFailures[ip] = append(s.RootFailures[ip], now)
+			s.RootFailures[ip] = s.PruneOld(s.RootFailures[ip], now, r.BruteForceWindow)
 			// Root targeting
 			if user == "root" {
 				last := s.LastRootTargetAlert[ip]
@@ -111,7 +107,7 @@ func (r *SSHRule) Evaluate(event *model.NormalizedEvent, context *context.Detect
 						"authentication",
 						fmt.Sprintf("SSH Root Targeting attempt from %s", ip),
 						event,
-						len(s.FailedByIP[ip]),
+						len(s.RootFailures[ip]),
 					)
 					alerts = append(alerts, alert)
 					s.LastRootTargetAlert[ip] = now
