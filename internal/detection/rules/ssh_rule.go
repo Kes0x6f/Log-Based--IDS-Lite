@@ -1,36 +1,40 @@
-package sshdetection
+package rule
 
 import (
 	"time"
 
+	"github.com/Kes0x6f/Log-Based--IDS/internal/detection/context"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 )
 
-const (
-	BruteForceThreshold    = 5
-	BruteForceWindow       = 2 * time.Minute
-	EnumerationThreshold   = 5
-	EnumerationWindow      = 3 * time.Minute
-	SuccessAfterFailWindow = 5 * time.Minute
-)
+type SSHRule struct {
+	RuleName string
+	Severity string
 
-type SSHDetectionState struct {
-	FailedByIP      map[string][]time.Time
-	FailedUsersByIP map[string]map[string]time.Time
-	RecentFailures  map[string][]time.Time
+	BruteForceThreshold    int
+	BruteForceWindow       time.Duration
+	EnumerationThreshold   int
+	EnumerationWindow      time.Duration
+	SuccessAfterFailWindow time.Duration
 }
 
-func NewSSHDetectionState() *SSHDetectionState {
-	return &SSHDetectionState{
-		FailedByIP:      make(map[string][]time.Time),
-		FailedUsersByIP: make(map[string]map[string]time.Time),
-		RecentFailures:  make(map[string][]time.Time),
+func NewSSHRule() *SSHRule {
+	return &SSHRule{
+		RuleName: "SSH ",
+		Severity: "HIGH",
+
+		BruteForceThreshold:    5,
+		BruteForceWindow:       2 * time.Minute,
+		EnumerationThreshold:   5,
+		EnumerationWindow:      3 * time.Minute,
+		SuccessAfterFailWindow: 5 * time.Minute,
 	}
 }
 
-func (s *SSHDetectionState) Process(event *model.NormalizedEvent) []string {
+func (r *SSHRule) Evaluate(event *model.NormalizedEvent, context *context.DetectionContext) []string {
 
 	var alerts []string
+	s := context.SSH
 	now := event.Timestamp
 
 	switch event.EventType {
@@ -45,9 +49,9 @@ func (s *SSHDetectionState) Process(event *model.NormalizedEvent) []string {
 
 		// Track failures by IP
 		s.FailedByIP[ip] = append(s.FailedByIP[ip], now)
-		s.FailedByIP[ip] = pruneOld(s.FailedByIP[ip], now, BruteForceWindow)
+		s.FailedByIP[ip] = s.PruneOld(s.FailedByIP[ip], now, r.BruteForceWindow)
 
-		if len(s.FailedByIP[ip]) >= BruteForceThreshold {
+		if len(s.FailedByIP[ip]) >= r.BruteForceThreshold {
 			alerts = append(alerts, "SSH Brute Force detected from "+ip)
 		}
 
@@ -57,15 +61,15 @@ func (s *SSHDetectionState) Process(event *model.NormalizedEvent) []string {
 		}
 
 		s.FailedUsersByIP[ip][user] = now
-		s.pruneUserEnumeration(ip, now)
+		s.PruneUserEnumeration(ip, now, r.EnumerationWindow)
 
-		if len(s.FailedUsersByIP[ip]) >= EnumerationThreshold {
+		if len(s.FailedUsersByIP[ip]) >= r.EnumerationThreshold {
 			alerts = append(alerts, "SSH Username Enumeration from "+ip)
 		}
 
 		// Track for success-after-failure
 		s.RecentFailures[ip] = append(s.RecentFailures[ip], now)
-		s.RecentFailures[ip] = pruneOld(s.RecentFailures[ip], now, SuccessAfterFailWindow)
+		s.RecentFailures[ip] = s.PruneOld(s.RecentFailures[ip], now, r.SuccessAfterFailWindow)
 
 		// Root targeting
 		if user == "root" {
@@ -95,24 +99,3 @@ func (s *SSHDetectionState) Process(event *model.NormalizedEvent) []string {
 }
 
 //just initial detection for ssh logs
-
-func pruneOld(times []time.Time, now time.Time, window time.Duration) []time.Time {
-	var pruned []time.Time
-	for _, t := range times {
-		if now.Sub(t) <= window {
-			pruned = append(pruned, t)
-		}
-	}
-	return pruned
-}
-
-func (s *SSHDetectionState) pruneUserEnumeration(ip string, now time.Time) {
-
-	users := s.FailedUsersByIP[ip]
-
-	for user, t := range users {
-		if now.Sub(t) > EnumerationWindow {
-			delete(users, user)
-		}
-	}
-}

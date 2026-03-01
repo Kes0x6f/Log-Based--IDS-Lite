@@ -3,7 +3,8 @@ package main
 import (
 	"fmt"
 
-	authEngine "github.com/Kes0x6f/Log-Based--IDS/internal/detection"
+	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
+	rule "github.com/Kes0x6f/Log-Based--IDS/internal/detection/rules"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/parser"
 )
 
@@ -16,7 +17,11 @@ func main() {
 		fmt.Println(*e)
 	}
 
-	detectedAlerts := authEngine.AuthEngine(events)
+	engine := detection.NewEngine([]detection.Rule{
+		rule.NewSSHRule(),
+	})
+
+	detectedAlerts := engine.Process(events)
 
 	for _, alert := range detectedAlerts {
 		fmt.Println(alert)
