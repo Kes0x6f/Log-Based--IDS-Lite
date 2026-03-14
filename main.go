@@ -1,25 +1,41 @@
 package main
 
 import (
-	"fmt"
-
-	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
-	rule "github.com/Kes0x6f/Log-Based--IDS/internal/detection/rules"
+	///"github.com/Kes0x6f/Log-Based--IDS/internal/collector"
+	///"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
+	///rule "github.com/Kes0x6f/Log-Based--IDS/internal/detection/rules"
+	"github.com/Kes0x6f/Log-Based--IDS/internal/collector"
+	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/parser"
 )
 
 func main() {
 
-	p := parser.GetParser("auth")
-	events, _ := p.Parse("logs/sample_auth.log")
+	///p := parser.GetParser("auth")
+	///events, _ := p.Parse("logs/sample_auth.log")
 
-	engine := detection.NewEngine([]detection.Rule{
-		rule.NewSSHRule(),
-	})
+	///engine := detection.NewEngine([]detection.Rule{
+	///	rule.NewSSHRule(),
+	///})
 
-	detectedAlerts := engine.Process(events)
+	/// := engine.Process(events)
+	///
+	///for _, alert := range detectedAlerts {
+	///	fmt.Println(alert)
+	///}
 
-	for _, alert := range detectedAlerts {
-		fmt.Println(alert)
+	//adding channels
+
+	rawLogChan := make(chan collector.RawLog)
+	parseChan := make(chan *model.NormalizedEvent, 1000)
+
+	collector := collector.FileCollector{
+		FilePath: "logs/sample_auth.log",
 	}
+
+	go collector.Start(rawLogChan)
+
+	go parser.ParserWorker(rawLogChan, parseChan)
+
+	select {}
 }

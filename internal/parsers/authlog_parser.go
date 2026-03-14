@@ -1,4 +1,4 @@
-package authparser
+package parsers
 
 import (
 	"bufio"

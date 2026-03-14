@@ -62,4 +62,14 @@ Jan 25 10:09:40 server1 sshd[1025]: Accepted password for maria from 192.168.1.4
 Jan 25 10:10:01 server1 sudo:    maria : TTY=pts/0 ; PWD=/home/maria ; USER=root ; COMMAND=/usr/bin/apt update
 Jan 25 10:10:02 server1 sudo: pam_unix(sudo:session): session opened for user root by maria(uid=0)
 Jan 25 10:10:10 server1 sudo: pam_unix(sudo:session): session closed for user root
-Jan 25 10:11:01 server1 sshd[1026]: Connection closed by 192.168.1.50 port 51234 [preauth]
+Jan 25 10:01:40 server1 sshd[1023]: Failed password for root from 192.168.1.10 port 22 ssh2
+Jan 25 10:01:40 server1 sshd[1023]: Failed password for root from 192.168.1.10 port 22 ssh2
+Jan 25 10:01:40 server1 sshd[1023]: Failed password for root from 192.168.1.10 port 22 ssh2
+Jan 25 10:01:40 server1 sshd[1023]: Failed password for root from 192.168.1.10 port 22 ssh2
+Jan 25 10:01:40 server1 sshd[1023]: Failed password for root from 192.168.1.10 port 22 ssh2
+Jan 25 10:01:40 server1 sshd[1023]: Failed password for root from 192.168.1.10 port 22 ssh2
+Jan 25 10:01:40 server1 sshd[1023]: Failed password for root from 192.168.1.10 port 22 ssh2
+Jan 25 10:01:40 server1 sshd[1023]: Failed password for root from 192.168.1.10 port 22 ssh2
+Jan 25 10:01:40 server1 sshd[1023]: Failed password for root from 192.168.1.10 port 22 ssh2
+Jan 25 10:01:40 server1 sshd[1023]: Failed password for root from 192.168.1.10 port 22 ssh2
+Jan 25 10:01:40 server1 sshd[1023]: Failed password for root from 192.168.1.10 port 22 ssh2
