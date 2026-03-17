@@ -27,7 +27,6 @@ type Parser interface {
 func ParserWorker(input <-chan collector.RawLog, output chan<- *model.NormalizedEvent) {
 
 	for log := range input {
-		fmt.Println("RAW LOG:", log.Message)
 
 		line := strings.TrimSpace(log.Message)
 		matches := headerRegex.FindStringSubmatch(line)

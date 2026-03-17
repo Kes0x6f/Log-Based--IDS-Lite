@@ -1,8 +1,6 @@
 package detection
 
 import (
-	"fmt"
-
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection/context"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 )
@@ -21,11 +19,9 @@ func NewEngine(rules []Rule) *Engine {
 
 func (e *Engine) Process(input <-chan *model.NormalizedEvent, output chan<- *model.Alert) {
 	for event := range input {
-		fmt.Println("printing event")
 		for _, rule := range e.Rules {
 
 			for _, alert := range rule.Evaluate(event, e.State) {
-				fmt.Println("printing an lert", alert)
 				output <- alert
 			}
 		}

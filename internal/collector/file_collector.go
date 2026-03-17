@@ -48,7 +48,6 @@ func (fc *FileCollector) Start(out chan<- RawLog) error {
 						if err != nil {
 							break
 						}
-
 						out <- RawLog{
 							Source:  fc.FilePath,
 							Message: line,
