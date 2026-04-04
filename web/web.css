@@ -1,0 +1,116 @@
+body {
+    font-family: Arial, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 20px;
+}
+
+h1 {
+    margin-bottom: 20px;
+}
+
+.filters {
+    margin-bottom: 20px;
+}
+.status {
+    font-size: 14px;
+}
+
+.status.online {
+    color: #22c55e;
+}
+
+/* Cards */
+.cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.card {
+    background: #020617;
+    border: 1px solid #1e293b;
+    padding: 16px;
+    border-radius: 8px;
+}
+
+.card h3 {
+    margin: 0;
+    font-size: 14px;
+    color: #94a3b8;
+}
+
+.card p {
+    font-size: 28px;
+    margin: 8px 0 0;
+}
+
+.card.danger p {
+    color: #ef4444;
+}
+
+/* Panels */
+.panel {
+    background: #020617;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 24px;
+}
+
+.panel h2 {
+    margin-top: 0;
+    font-size: 18px;
+}
+
+input, select, button {
+    padding: 8px;
+    margin-right: 10px;
+    border-radius: 6px;
+    border: none;
+}
+
+button {
+    background: #3b82f6;
+    color: white;
+    cursor: pointer;
+}
+
+/* Table */
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    text-align: left;
+    padding: 10px;
+    border-bottom: 1px solid #1e293b;
+    font-size: 14px;
+}
+
+th {
+    color: #94a3b8;
+}
+
+.high {
+    color: #ef4444;
+}
+
+.medium {
+    color: #f59e0b;
+}
+
+.low {
+    color: #22c55e;
+}
+
+#logs {
+    height: 250px;
+    overflow-y: scroll;
+    background: #020617;   /* darker, nicer */
+    color: #e2e8f0;        /* readable text */
+    padding: 10px;
+    font-family: monospace;
+}

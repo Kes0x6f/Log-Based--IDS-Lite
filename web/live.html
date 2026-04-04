@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live Logs</title>
+    <link rel="stylesheet" href="web.css">
+</head>
+<body>
+
+<h1>📡 Live Logs</h1>
+
+<a href="/">← Back to Dashboard</a>
+
+<pre id="logs"></pre>
+
+<script>
+const logBox = document.getElementById("logs");
+
+// connect to SSE endpoint
+const evtSource = new EventSource("/stream/logs");
+
+evtSource.onmessage = function(event) {
+    logBox.textContent += event.data + "\n";
+
+    // auto-scroll
+    logBox.scrollTop = logBox.scrollHeight;
+};
+
+evtSource.onerror = function() {
+    console.log("Stream disconnected");
+};
+
+evtSource.onmessage = function(event) {
+    console.log("RECEIVED:", event.data);
+    logBox.textContent += event.data + "\n";
+};
+
+console.log(logBox);
+
+</script>
+
+</body>
+</html>

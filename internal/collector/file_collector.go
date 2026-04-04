@@ -6,11 +6,13 @@ import (
 	"log"
 	"os"
 
+	"github.com/Kes0x6f/Log-Based--IDS/internal/stream"
 	"github.com/fsnotify/fsnotify"
 )
 
 type FileCollector struct {
-	FilePath string
+	FilePath    string
+	Broadcaster *stream.Broadcaster
 }
 
 type RawLog struct {
@@ -51,6 +53,9 @@ func (fc *FileCollector) Start(out chan<- RawLog) error {
 						out <- RawLog{
 							Source:  fc.FilePath,
 							Message: line,
+						}
+						if fc.Broadcaster != nil {
+							fc.Broadcaster.Publish(line)
 						}
 					}
 

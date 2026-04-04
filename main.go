@@ -1,18 +1,17 @@
 package main
 
 import (
-	///"github.com/Kes0x6f/Log-Based--IDS/internal/collector"
-	///"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
-	///rule "github.com/Kes0x6f/Log-Based--IDS/internal/detection/rules"
 	"log"
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/alert"
+	"github.com/Kes0x6f/Log-Based--IDS/internal/api"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/collector"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/database"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
 	rule "github.com/Kes0x6f/Log-Based--IDS/internal/detection/rules"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/parser"
+	"github.com/Kes0x6f/Log-Based--IDS/internal/stream"
 )
 
 func main() {
@@ -31,12 +30,28 @@ func main() {
 		AlertRepo: alertRepo,
 	}
 
-	rawLogChan := make(chan collector.RawLog, 100)
+	broadcaster := stream.NewBroadcaster()
+
+	apiHandler := &api.Handler{
+		Repo:        alertRepo,
+		Broadcaster: broadcaster,
+	}
+
+	router := api.NewRouter(apiHandler)
+
+	server := &api.Server{
+		Handler: router,
+	}
+
+	go server.Start(":8888")
+
+	rawLogChan := make(chan collector.RawLog, 1000)
 	parseChan := make(chan *model.NormalizedEvent, 1000)
 	alertChan := make(chan *model.Alert, 100)
 
 	filecollector := collector.FileCollector{
-		FilePath: "logs/sample_auth.log",
+		FilePath:    "logs/sample_auth.log",
+		Broadcaster: broadcaster,
 	}
 	engine := detection.NewEngine([]detection.Rule{
 		rule.NewSSHRule(),

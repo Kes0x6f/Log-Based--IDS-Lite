@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>IDS Dashboard</title>
+    <link rel="stylesheet" href="/web.css">
+</head>
+<body>
+
+<header class="header">
+    <h1>Log-Based IDS Dashboard</h1>
+    <span class="status online">● System Online</span>
+</header>
+
+<section class="cards">
+    <div class="card">
+        <h3>Total Logs</h3>
+        <p id="total-logs">0</p>
+    </div>
+    <div class="card">
+        <h3>Alerts</h3>
+        <p id="alert-count">0</p>
+    </div>
+    <div class="card danger">
+        <h3>High Severity</h3>
+        <p id="high-count">0</p>
+    </div>
+    <div class="card">
+        <h3>Unique IPs</h3>
+        <p id="unique-ip-count">0</p>
+    </div>
+</section>
+
+<section class="panel">
+    <h2>Recent Alerts</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>Rule</th>
+                <th>Source IP</th>
+                <th>Severity</th>
+                <th>Count</th>
+            </tr>
+        </thead>
+        <tbody id="alerts-body">
+            
+        </tbody>
+    </table>
+</section>
+
+<section class="panel">
+    <h2>Log Viewer</h2>
+     <pre id="logs"></pre>
+</section>
+
+</body>
+</html>
+
+<script>
+    const logBox = document.getElementById("logs");
+    const alertsBody = document.getElementById("alerts-body");
+    
+    //Log Count
+    const totalLogsEl = document.getElementById("total-logs");
+    let logCount = 0;
+
+    //SSE
+    const evtSource = new EventSource("/stream/logs");
+
+    evtSource.onmessage = function(event) {
+        const line = document.createElement("p");
+        line.textContent = event.data;
+        logBox.appendChild(line);
+        logBox.scrollTop = logBox.scrollHeight;
+
+        // Increment log counter
+        logCount++;
+        totalLogsEl.textContent = logCount;
+    };
+
+
+    // ===== ALERT POLLING =====
+    async function fetchAlerts() {
+        try {
+            const res = await fetch("/alerts/recent?limit=5")
+            const alerts = await res.json();
+
+            // Clear table
+            alertsBody.innerHTML = "";
+
+            alerts.forEach(alert => {
+                const row = document.createElement("tr");
+
+                // Format time (optional improvement)
+                const d = new Date(alert.Timestamp);
+                const time = d.toLocaleDateString() + " " + d.toLocaleTimeString();
+
+                row.innerHTML = `
+                    <td>${time}</td>
+                    <td>${alert.RuleName}</td>
+                    <td>${alert.SourceIP}</td>
+                    <td class="${alert.Severity.toLowerCase()}">${alert.Severity}</td>
+                    <td>${alert.EventCount}</td>
+                `;
+
+                alertsBody.appendChild(row);
+            });
+
+        } catch (err) {
+            console.error("Failed to fetch alerts:", err);
+        }
+    }
+
+
+    const alertCountEl = document.getElementById("alert-count");
+
+    async function fetchAlertCount() {
+        try {
+            const res = await fetch("/alerts/count");
+            const data = await res.json();
+
+            alertCountEl.textContent = data.count;
+
+        } catch (err) {
+            console.error("Failed to fetch alert count:", err);
+        }
+    }
+
+    const highCountEl = document.getElementById("high-count");
+
+    async function fetchHighSeverityCount() {
+        try {
+            const res = await fetch("/alerts/severity-count?severity=HIGH");
+            const data = await res.json();
+
+            highCountEl.textContent = data.count;
+
+        } catch (err) {
+            console.error("Failed to fetch high severity count:", err);
+        }
+    }
+
+    const uniqueIpEl = document.getElementById("unique-ip-count");
+
+    async function fetchUniqueIPs() {
+        try {
+            const res = await fetch("/alerts/unique-ips");
+            const data = await res.json();
+
+            uniqueIpEl.textContent = data.count;
+
+        } catch (err) {
+            console.error("Failed to fetch unique IP count:", err);
+        }
+    }
+
+    
+    // Run immediately
+    fetchAlerts();
+    fetchAlertCount();
+    fetchHighSeverityCount();
+    fetchUniqueIPs();
+
+    // Poll every 3 seconds
+    setInterval(fetchAlerts, 3000);
+    setInterval(fetchAlertCount, 5000);
+    setInterval(fetchHighSeverityCount, 5000);
+    setInterval(fetchUniqueIPs, 5000);
+</script>

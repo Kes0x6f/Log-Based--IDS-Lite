@@ -8,7 +8,7 @@ import (
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/collector"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
-	"github.com/Kes0x6f/Log-Based--IDS/internal/parsers"
+	"github.com/Kes0x6f/Log-Based--IDS/internal/parser/parsers"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/parsetimestamp"
 )
 
