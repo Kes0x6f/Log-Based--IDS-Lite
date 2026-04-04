@@ -47,17 +47,21 @@ func main() {
 
 	rawLogChan := make(chan collector.RawLog, 1000)
 	parseChan := make(chan *model.NormalizedEvent, 1000)
-	alertChan := make(chan *model.Alert, 100)
+	alertChan := make(chan *model.Alert, 1000)
 
-	filecollector := collector.FileCollector{
-		FilePath:    "logs/sample_auth.log",
-		Broadcaster: broadcaster,
+	filecollector := []collector.FileCollector{
+		{FilePath: "logs/sample_auth.log",
+			Source:      "auth",
+			Broadcaster: broadcaster},
 	}
 	engine := detection.NewEngine([]detection.Rule{
 		rule.NewSSHRule(),
 	})
 
-	go filecollector.Start(rawLogChan)
+	for _, c := range filecollector {
+		go c.Start(rawLogChan)
+	}
+
 	go parser.ParserWorker(rawLogChan, parseChan)
 	go engine.Process(parseChan, alertChan)
 	go alertManager.Start(alertChan)

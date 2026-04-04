@@ -63,7 +63,6 @@ func ParseLine(line string) (*model.NormalizedEvent, error) {
 	event := &model.NormalizedEvent{
 		Timestamp: timestamp,
 		Host:      matches[2],
-		LogSource: "auth.log",
 		Program:   matches[3],
 		Message:   matches[4],
 		RawLine:   line,

@@ -2,7 +2,6 @@ package parser
 
 import (
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -46,7 +45,7 @@ func ParserWorker(input <-chan collector.RawLog, output chan<- *model.Normalized
 		event := &model.NormalizedEvent{
 			Timestamp: timestamp,
 			Host:      matches[2],
-			LogSource: filepath.Base(log.Source),
+			LogSource: log.Source,
 			Program:   matches[3],
 			Message:   matches[4],
 			RawLine:   log.Message,
