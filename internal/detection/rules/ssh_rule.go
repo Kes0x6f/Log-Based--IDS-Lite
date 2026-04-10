@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection/context"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 )
@@ -14,6 +15,8 @@ type SSHRule struct {
 	EnumerationThreshold   int
 	EnumerationWindow      time.Duration
 	SuccessAfterFailWindow time.Duration
+	RapidReconnectWindow   time.Duration
+	DistributedBruteWindow time.Duration
 }
 
 func NewSSHRule() *SSHRule {
@@ -23,14 +26,24 @@ func NewSSHRule() *SSHRule {
 		EnumerationThreshold:   5,
 		EnumerationWindow:      3 * time.Minute,
 		SuccessAfterFailWindow: 5 * time.Minute,
+		RapidReconnectWindow:   2 * time.Minute,
+		DistributedBruteWindow: 3 * time.Minute,
 	}
 }
 
-func (r *SSHRule) Evaluate(event *model.NormalizedEvent, context *context.DetectionContext) []*model.Alert {
-
-	if event.Program != "sshd" {
-		return nil
+func (r *SSHRule) Meta() detection.RuleMeta {
+	return detection.RuleMeta{
+		LogSource: "auth",
+		Program:   "sshd",
+		EventTypes: []string{
+			"SSH_FAILED",
+			"SSH_SUCCESS",
+			"SSH_INVALID_USER",
+			"SSH_DISCONNECT",
+		},
 	}
+}
+func (r *SSHRule) Evaluate(event *model.NormalizedEvent, context *context.DetectionContext) []*model.Alert {
 
 	var alerts []*model.Alert
 	s := context.SSH
@@ -47,7 +60,9 @@ func (r *SSHRule) Evaluate(event *model.NormalizedEvent, context *context.Detect
 		user := event.Username
 
 		// Track failures by IP
-		s.FailedByIP[ip] = append(s.FailedByIP[ip], now)
+		for i := 0; i < event.EventCount; i++ {
+			s.FailedByIP[ip] = append(s.FailedByIP[ip], now)
+		}
 		s.FailedByIP[ip] = s.PruneOld(s.FailedByIP[ip], now, r.BruteForceWindow)
 
 		if len(s.FailedByIP[ip]) >= r.BruteForceThreshold {
@@ -114,7 +129,54 @@ func (r *SSHRule) Evaluate(event *model.NormalizedEvent, context *context.Detect
 				}
 			}
 		}
+		//Distributed Brute Force
+		if s.IPsByUser[user] == nil {
+			s.IPsByUser[user] = make(map[string]time.Time)
+		}
+		s.IPsByUser[user][ip] = now
 
+		// prune old IPs
+		for k, t := range s.IPsByUser[user] {
+			if now.Sub(t) > 3*time.Minute {
+				delete(s.IPsByUser[user], k)
+			}
+		}
+
+		if len(s.IPsByUser[user]) >= 3 {
+			last := s.LastDistributedAlert[user]
+			if now.Sub(last) > 3*time.Minute {
+				alerts = append(alerts, model.NewAlert(
+					"Distributed Brute Force",
+					model.SeverityHigh,
+					"authentication",
+					fmt.Sprintf("Multiple IPs targeting user %s", user),
+					event,
+					len(s.IPsByUser[user]),
+				))
+				s.LastDistributedAlert[user] = now
+			}
+		}
+
+		if event.EventType == "SSH_INVALID_USER" {
+
+			s.InvalidUserAttempts[ip] = append(s.InvalidUserAttempts[ip], now)
+			s.InvalidUserAttempts[ip] = s.PruneOld(s.InvalidUserAttempts[ip], now, 2*time.Minute)
+
+			if len(s.InvalidUserAttempts[ip]) >= 5 {
+				last := s.LastInvalidUserAlert[ip]
+				if now.Sub(last) > 2*time.Minute {
+					alerts = append(alerts, model.NewAlert(
+						"Invalid User Brute Force",
+						model.SeverityMedium,
+						"authentication",
+						fmt.Sprintf("Multiple invalid user attempts from %s", ip),
+						event,
+						len(s.InvalidUserAttempts[ip]),
+					))
+					s.LastInvalidUserAlert[ip] = now
+				}
+			}
+		}
 	// ---------------------------------
 	// SSH SUCCESS
 	// ---------------------------------
@@ -148,6 +210,35 @@ func (r *SSHRule) Evaluate(event *model.NormalizedEvent, context *context.Detect
 		delete(s.RecentFailures, ip)
 		delete(s.FailedByIP, ip)
 		delete(s.FailedUsersByIP, ip)
+
+	//Rapid Reconnect
+	case "SSH_DISCONNECT":
+		ip := event.SourceIP
+
+		if s.DisconnectsByIP[ip] == nil {
+			s.DisconnectsByIP[ip] = []time.Time{}
+		}
+
+		for i := 0; i < event.EventCount; i++ {
+			s.DisconnectsByIP[ip] = append(s.DisconnectsByIP[ip], now)
+		}
+
+		s.DisconnectsByIP[ip] = s.PruneOld(s.DisconnectsByIP[ip], now, r.RapidReconnectWindow)
+
+		if len(s.DisconnectsByIP[ip]) >= 3 {
+			last := s.LastReconnectAlert[ip]
+			if now.Sub(last) > r.RapidReconnectWindow {
+				alerts = append(alerts, model.NewAlert(
+					"SSH Rapid Reconnect Attack",
+					model.SeverityHigh,
+					"authentication",
+					fmt.Sprintf("Frequent reconnect attempts from %s", ip),
+					event,
+					len(s.DisconnectsByIP[ip]),
+				))
+				s.LastReconnectAlert[ip] = now
+			}
+		}
 	}
 
 	return alerts

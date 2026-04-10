@@ -50,7 +50,7 @@ func main() {
 	alertChan := make(chan *model.Alert, 1000)
 
 	filecollector := []collector.FileCollector{
-		{FilePath: "logs/sample_auth.log",
+		{FilePath: "/var/log/auth.log",
 			Source:      "auth",
 			Broadcaster: broadcaster},
 	}

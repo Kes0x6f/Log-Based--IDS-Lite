@@ -3,17 +3,27 @@ package parsers
 import (
 	"regexp"
 	"strings"
+	"strconv"
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 )
 
 var ipPortRegex = regexp.MustCompile(`from (\S+) port (\d+)`)
+var repeatRegex = regexp.MustCompile(`message repeated (\d+) times`)
+var pamRepeatRegex = regexp.MustCompile(`(\d+) more authentication failure(s)?`)
 
 func SSHParser(event *model.NormalizedEvent) *model.NormalizedEvent {
 	message := event.Message
 	//failed password
-	switch {
-	case strings.Contains(message, "Failed password"):
+	switch {	
+	//repeated message
+	case strings.Contains(message, "message repeated"):
+		event.EventType = "SSH_FAILED"
+		event.Username = extractUsername(message)
+		event.SourceIP, event.Port = extractIPPort(message)
+		event.EventCount = extractRepeatCount(message)
+	
+	case strings.Contains(message, "Failed") && strings.Contains(message, "for"):
 		event.EventType = "SSH_FAILED"
 		// Handle "invalid user" variant
 		if strings.Contains(message, "invalid user") {
@@ -47,6 +57,19 @@ func SSHParser(event *model.NormalizedEvent) *model.NormalizedEvent {
 		event.EventType = "SSH_DISCONNECT"
 		event.Username = extractUsername(message)
 		event.SourceIP, event.Port = extractIPPort(message)
+	
+	//connection closed
+	case strings.Contains(message, "Connection closed"):
+		event.EventType = "SSH_DISCONNECT"
+		event.Username = extractUsername(message)
+		event.SourceIP, event.Port = extractIPPort(message)
+	
+	//PAM authentication failure
+	case strings.Contains(message, "authentication failure"):
+		event.EventType = "SSH_FAILED"
+		event.SourceIP = extractIPFromRhost(message)
+		event.Username = extractUserFromPAM(message)
+		event.EventCount = extractPAMRepeat(message)
 
 	//for events not mentioned
 	default:
@@ -70,11 +93,17 @@ func extractUsername(message string) string {
 
 	parts := strings.Split(message, " ")
 	for i := 0; i < len(parts)-1; i++ {
+		// Case 1: "for <user>"
 		if parts[i] == "for" {
 			// Handle: for invalid user admin
 			if parts[i+1] == "invalid" && i+3 < len(parts) {
 				return parts[i+3]
 			}
+			return parts[i+1]
+		}
+
+		// Case 2: "user <username>"
+		if parts[i] == "user" {
 			return parts[i+1]
 		}
 	}
@@ -88,4 +117,43 @@ func extractInvalidUser(message string) string {
 		return parts[2]
 	}
 	return ""
+}
+
+func extractIPFromRhost(message string) string {
+	// look for: rhost=IP
+	parts := strings.Split(message, " ")
+	for _, p := range parts {
+		if strings.HasPrefix(p, "rhost=") {
+			return strings.TrimPrefix(p, "rhost=")
+		}
+	}
+	return ""
+}
+
+func extractUserFromPAM(message string) string {
+	parts := strings.Split(message, " ")
+	for _, p := range parts {
+		if strings.HasPrefix(p, "user=") {
+			return strings.TrimPrefix(p, "user=")
+		}
+	}
+	return ""
+}
+
+func extractRepeatCount(message string) int {
+	matches := repeatRegex.FindStringSubmatch(message)
+	if len(matches) == 2 {
+		n, _ := strconv.Atoi(matches[1])
+		return n + 1 // include original event
+	}
+	return 1
+}
+
+func extractPAMRepeat(message string) int {
+	matches := pamRepeatRegex.FindStringSubmatch(message)
+	if len(matches) == 2 {
+		n, _ := strconv.Atoi(matches[1])
+		return n
+	}
+	return 1
 }

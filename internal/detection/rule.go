@@ -6,5 +6,6 @@ import (
 )
 
 type Rule interface {
+	Meta() RuleMeta
 	Evaluate(event *model.NormalizedEvent, state *context.DetectionContext) []*model.Alert
 }

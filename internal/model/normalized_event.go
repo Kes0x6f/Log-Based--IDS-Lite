@@ -15,4 +15,5 @@ type NormalizedEvent struct {
 	Port      string
 	Message   string
 	RawLine   string
+	EventCount int
 }

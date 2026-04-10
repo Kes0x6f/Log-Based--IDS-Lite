@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"time"
 	"regexp"
 	"strings"
 
@@ -13,6 +14,10 @@ import (
 
 var headerRegex = regexp.MustCompile(
 	`^([A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+(\S+)\s+([a-zA-Z0-9_-]+)(?:\[\d+\])?:\s+(.*)$`,
+)
+
+var isoHeaderRegex = regexp.MustCompile(
+	`^(\d{4}-\d{2}-\d{2}T[\d:.+-]+)\s+(\S+)\s+([a-zA-Z0-9_-]+)(?:\[\d+\])?:\s+(.*)$`,
 )
 
 var programParsers = map[string]func(*model.NormalizedEvent) *model.NormalizedEvent{
@@ -28,14 +33,37 @@ func ParserWorker(input <-chan collector.RawLog, output chan<- *model.Normalized
 	for log := range input {
 
 		line := strings.TrimSpace(log.Message)
-		matches := headerRegex.FindStringSubmatch(line)
+		var matches []string
+		var timestampStr string
 
-		if matches == nil {
-			fmt.Println("error in regex")
-			continue
+		matches = isoHeaderRegex.FindStringSubmatch(line)
+		if matches != nil {
+			timestampStr = matches[1]
+		} else {
+			matches = headerRegex.FindStringSubmatch(line)
+			if matches != nil {
+				timestampStr = matches[1]
+			}
 		}
 
-		timestamp, err := parsetimestamp.ParseTimeStamp(matches[1])
+		if matches == nil {
+			continue
+		}
+		
+		var timestamp time.Time
+		var err error
+
+		if strings.Contains(timestampStr, "T") {
+			// ISO format
+			timestamp, err = time.Parse(time.RFC3339Nano, timestampStr)
+		} else {
+			// syslog format
+			timestamp, err = parsetimestamp.ParseTimeStamp(timestampStr)
+		}
+
+		if err != nil {
+			continue
+		}
 
 		if err != nil {
 			fmt.Println("error in timestamp")
@@ -49,6 +77,7 @@ func ParserWorker(input <-chan collector.RawLog, output chan<- *model.Normalized
 			Program:   matches[3],
 			Message:   matches[4],
 			RawLine:   log.Message,
+			EventCount: 1,
 		}
 
 		if parser, ok := programParsers[event.Program]; ok {
