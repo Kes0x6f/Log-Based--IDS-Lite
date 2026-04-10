@@ -8,7 +8,7 @@ import (
 	"github.com/Kes0x6f/Log-Based--IDS/internal/collector"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/database"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
-	rule "github.com/Kes0x6f/Log-Based--IDS/internal/detection/rules"
+	rule "github.com/Kes0x6f/Log-Based--IDS/internal/detection/rules/auth"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/parser"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/stream"
@@ -55,7 +55,13 @@ func main() {
 			Broadcaster: broadcaster},
 	}
 	engine := detection.NewEngine([]detection.Rule{
-		rule.NewSSHRule(),
+		rule.NewSSHBruteForceRule(),
+		rule.NewSSHEnumerationRule(),
+		rule.NewSSHSuccessAfterFailRule(),
+		rule.NewSSHInvalidUserRule(),
+		rule.NewSSHReconnectRule(),
+		rule.NewSSHRootTargetRule(),
+		rule.NewSSHDistributedBruteForceRule(),
 	})
 
 	for _, c := range filecollector {
