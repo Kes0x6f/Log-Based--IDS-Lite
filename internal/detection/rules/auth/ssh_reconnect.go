@@ -6,6 +6,7 @@ import (
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection/context"
+	"github.com/Kes0x6f/Log-Based--IDS/internal/helper"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 )
 
@@ -48,7 +49,7 @@ func (r *SSHReconnectRule) Evaluate(event *model.NormalizedEvent, ctx *context.D
 	}
 
 	// prune old entries (sliding window)
-	s.DisconnectsByIP[ip] = s.PruneOld(s.DisconnectsByIP[ip], now, r.Window)
+	s.DisconnectsByIP[ip] = helper.PruneOld(s.DisconnectsByIP[ip], now, r.Window)
 
 	// threshold check
 	if len(s.DisconnectsByIP[ip]) >= r.Threshold {

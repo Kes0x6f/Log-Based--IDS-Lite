@@ -6,6 +6,7 @@ import (
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection/context"
+	"github.com/Kes0x6f/Log-Based--IDS/internal/helper"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 )
 
@@ -48,7 +49,7 @@ func (r *SSHSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *co
 		s.RecentFailures[ip] = append(s.RecentFailures[ip], now)
 
 		// prune old entries
-		s.RecentFailures[ip] = s.PruneOld(s.RecentFailures[ip], now, r.Window)
+		s.RecentFailures[ip] = helper.PruneOld(s.RecentFailures[ip], now, r.Window)
 
 		return nil
 

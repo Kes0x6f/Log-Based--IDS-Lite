@@ -2,27 +2,27 @@ package parsers
 
 import (
 	"regexp"
-	"strings"
 	"strconv"
+	"strings"
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 )
 
-var ipPortRegex = regexp.MustCompile(`from (\S+) port (\d+)`)
+var ipPortRegex = regexp.MustCompile(`(\S+) port (\d+)`)
 var repeatRegex = regexp.MustCompile(`message repeated (\d+) times`)
 var pamRepeatRegex = regexp.MustCompile(`(\d+) more authentication failure(s)?`)
 
 func SSHParser(event *model.NormalizedEvent) *model.NormalizedEvent {
 	message := event.Message
 	//failed password
-	switch {	
+	switch {
 	//repeated message
 	case strings.Contains(message, "message repeated"):
 		event.EventType = "SSH_FAILED"
 		event.Username = extractUsername(message)
 		event.SourceIP, event.Port = extractIPPort(message)
 		event.EventCount = extractRepeatCount(message)
-	
+
 	case strings.Contains(message, "Failed") && strings.Contains(message, "for"):
 		event.EventType = "SSH_FAILED"
 		// Handle "invalid user" variant
@@ -57,13 +57,13 @@ func SSHParser(event *model.NormalizedEvent) *model.NormalizedEvent {
 		event.EventType = "SSH_DISCONNECT"
 		event.Username = extractUsername(message)
 		event.SourceIP, event.Port = extractIPPort(message)
-	
+
 	//connection closed
 	case strings.Contains(message, "Connection closed"):
 		event.EventType = "SSH_DISCONNECT"
 		event.Username = extractUsername(message)
 		event.SourceIP, event.Port = extractIPPort(message)
-	
+
 	//PAM authentication failure
 	case strings.Contains(message, "authentication failure"):
 		event.EventType = "SSH_FAILED"

@@ -1,11 +1,13 @@
 package context
 
 type DetectionContext struct {
-	SSH *SSHState
+	SSH  *SSHState
+	Sudo *SudoState
 }
 
 func NewDetectionContext() *DetectionContext {
 	return &DetectionContext{
-		SSH: NewSSHState(),
+		SSH:  NewSSHState(),
+		Sudo: NewSudoState(),
 	}
 }

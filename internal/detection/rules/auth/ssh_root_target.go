@@ -6,6 +6,7 @@ import (
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection/context"
+	"github.com/Kes0x6f/Log-Based--IDS/internal/helper"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 )
 
@@ -52,7 +53,7 @@ func (r *SSHRootTargetRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 	}
 
 	// prune old entries
-	s.RootFailures[ip] = s.PruneOld(s.RootFailures[ip], now, r.Window)
+	s.RootFailures[ip] = helper.PruneOld(s.RootFailures[ip], now, r.Window)
 
 	// cooldown check (prevents spam)
 	last := s.LastRootTargetAlert[ip]

@@ -2,9 +2,9 @@ package parser
 
 import (
 	"fmt"
-	"time"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/collector"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
@@ -22,6 +22,7 @@ var isoHeaderRegex = regexp.MustCompile(
 
 var programParsers = map[string]func(*model.NormalizedEvent) *model.NormalizedEvent{
 	"sshd": parsers.SSHParser,
+	"sudo": parsers.SUDOParser,
 }
 
 type Parser interface {
@@ -49,7 +50,7 @@ func ParserWorker(input <-chan collector.RawLog, output chan<- *model.Normalized
 		if matches == nil {
 			continue
 		}
-		
+
 		var timestamp time.Time
 		var err error
 
@@ -71,12 +72,12 @@ func ParserWorker(input <-chan collector.RawLog, output chan<- *model.Normalized
 		}
 
 		event := &model.NormalizedEvent{
-			Timestamp: timestamp,
-			Host:      matches[2],
-			LogSource: log.Source,
-			Program:   matches[3],
-			Message:   matches[4],
-			RawLine:   log.Message,
+			Timestamp:  timestamp,
+			Host:       matches[2],
+			LogSource:  log.Source,
+			Program:    matches[3],
+			Message:    matches[4],
+			RawLine:    log.Message,
 			EventCount: 1,
 		}
 

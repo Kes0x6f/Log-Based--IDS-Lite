@@ -6,6 +6,7 @@ import (
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection/context"
+	"github.com/Kes0x6f/Log-Based--IDS/internal/helper"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 )
 
@@ -48,7 +49,7 @@ func (r *SSHInvalidUserRule) Evaluate(event *model.NormalizedEvent, ctx *context
 	}
 
 	// prune old entries (sliding window)
-	s.InvalidUserAttempts[ip] = s.PruneOld(s.InvalidUserAttempts[ip], now, r.Window)
+	s.InvalidUserAttempts[ip] = helper.PruneOld(s.InvalidUserAttempts[ip], now, r.Window)
 
 	// threshold check
 	if len(s.InvalidUserAttempts[ip]) >= r.Threshold {

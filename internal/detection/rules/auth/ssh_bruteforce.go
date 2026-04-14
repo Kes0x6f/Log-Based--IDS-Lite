@@ -6,6 +6,7 @@ import (
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection/context"
+	"github.com/Kes0x6f/Log-Based--IDS/internal/helper"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 )
 
@@ -41,7 +42,7 @@ func (r *SSHBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 		s.FailedByIP[ip] = append(s.FailedByIP[ip], now)
 	}
 
-	s.FailedByIP[ip] = s.PruneOld(s.FailedByIP[ip], now, r.Window)
+	s.FailedByIP[ip] = helper.PruneOld(s.FailedByIP[ip], now, r.Window)
 
 	if len(s.FailedByIP[ip]) >= r.Threshold {
 		last := s.LastBruteForceAlert[ip]

@@ -62,6 +62,12 @@ func main() {
 		rule.NewSSHReconnectRule(),
 		rule.NewSSHRootTargetRule(),
 		rule.NewSSHDistributedBruteForceRule(),
+
+		rule.NewSudoBruteForceRule(),
+		rule.NewSudoSuccessAfterFailRule(),
+		rule.NewSudoSensitiveCommandRule(),
+		rule.NewSudoCommandAbuseRule(),
+		rule.NewSudoRootAbuseRule(),
 	})
 
 	for _, c := range filecollector {
