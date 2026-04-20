@@ -73,8 +73,6 @@ func (r *SudoRootAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 
 				if now.Sub(execTime) <= 10*time.Second {
 
-					// ✅ MATCH FOUND
-
 					if s.RootSessionsByUser[u] == nil {
 						s.RootSessionsByUser[u] = []time.Time{}
 					}
