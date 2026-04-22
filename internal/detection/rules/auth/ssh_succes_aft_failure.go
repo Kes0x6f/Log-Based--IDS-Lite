@@ -33,36 +33,57 @@ func (r *SSHSuccessAfterFailRule) Meta() detection.RuleMeta {
 	}
 }
 
+type sshSuccessAfterFailState struct {
+	recentFailures           map[string][]time.Time
+	lastSuspiciousLoginAlert map[string]time.Time
+	// cooldown fix fields
+	lastAlertID  map[string]string
+	runningCount map[string]int
+}
+
+func newSSHSuccessAfterFailState() *sshSuccessAfterFailState {
+	return &sshSuccessAfterFailState{
+		recentFailures:           make(map[string][]time.Time),
+		lastSuspiciousLoginAlert: make(map[string]time.Time),
+		lastAlertID:              make(map[string]string),
+		runningCount:             make(map[string]int),
+	}
+}
+
+// typed accessor — initialises on first call, no rule ever calls SetPrivate directly
+func getSSHSuccessAfterFailState(ctx *context.DetectionContext) *sshSuccessAfterFailState {
+	if v, ok := ctx.GetPrivate("ssh_success_after_fail"); ok {
+		return v.(*sshSuccessAfterFailState)
+	}
+	s := newSSHSuccessAfterFailState()
+	ctx.SetPrivate("ssh_success_after_fail", s)
+	return s
+}
+
 func (r *SSHSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
 
-	s := ctx.SSH
+	s := getSSHSuccessAfterFailState(ctx)
 	ip := event.SourceIP
 	now := event.Timestamp
 
 	switch event.EventType {
 
-	// -------------------------
-	// TRACK FAILURES
-	// -------------------------
 	case "SSH_FAILED", "SSH_INVALID_USER":
 
-		s.RecentFailures[ip] = append(s.RecentFailures[ip], now)
+		s.recentFailures[ip] = append(s.recentFailures[ip], now)
 
 		// prune old entries
-		s.RecentFailures[ip] = helper.PruneOld(s.RecentFailures[ip], now, r.Window)
+		s.recentFailures[ip] = helper.PruneOld(s.recentFailures[ip], now, r.Window)
 
 		return nil
 
-	// -------------------------
-	// DETECT SUCCESS AFTER FAIL
-	// -------------------------
 	case "SSH_SUCCESS":
 
-		failures := s.RecentFailures[ip]
+		failures := s.recentFailures[ip]
 
 		if len(failures) >= r.Threshold {
 
-			last := s.LastSuspiciousLoginAlert[ip]
+			last := s.lastSuspiciousLoginAlert[ip]
 
 			if now.Sub(last) > r.Window {
 
@@ -79,17 +100,17 @@ func (r *SSHSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *co
 					len(failures),
 				)
 
-				s.LastSuspiciousLoginAlert[ip] = now
+				s.lastSuspiciousLoginAlert[ip] = now
 
 				// reset after success
-				delete(s.RecentFailures, ip)
+				delete(s.recentFailures, ip)
 
 				return []*model.Alert{alert}
 			}
 		}
 
 		// reset even if below threshold (clean state)
-		delete(s.RecentFailures, ip)
+		delete(s.recentFailures, ip)
 	}
 
 	return nil

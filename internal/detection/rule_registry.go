@@ -3,36 +3,34 @@ package detection
 import "github.com/Kes0x6f/Log-Based--IDS/internal/model"
 
 type RuleRegistry struct {
-	byProgramEvent map[string]map[string][]Rule
+	index map[string]map[string]map[string][]Rule
+	//     logSource  → program   → eventType → rules
 }
 
 func NewRuleRegistry(rules []Rule) *RuleRegistry {
 	reg := &RuleRegistry{
-		byProgramEvent: make(map[string]map[string][]Rule),
+		index: make(map[string]map[string]map[string][]Rule),
 	}
-
 	for _, rule := range rules {
 		meta := rule.Meta()
-
-		// ensure program exists
-		if reg.byProgramEvent[meta.Program] == nil {
-			reg.byProgramEvent[meta.Program] = make(map[string][]Rule)
+		if reg.index[meta.LogSource] == nil {
+			reg.index[meta.LogSource] = make(map[string]map[string][]Rule)
 		}
-
-		// index by event types
+		if reg.index[meta.LogSource][meta.Program] == nil {
+			reg.index[meta.LogSource][meta.Program] = make(map[string][]Rule)
+		}
 		for _, evt := range meta.EventTypes {
-			reg.byProgramEvent[meta.Program][evt] =
-				append(reg.byProgramEvent[meta.Program][evt], rule)
+			reg.index[meta.LogSource][meta.Program][evt] =
+				append(reg.index[meta.LogSource][meta.Program][evt], rule)
 		}
 	}
-
 	return reg
 }
 
 func (r *RuleRegistry) GetRules(event *model.NormalizedEvent) []Rule {
-	if progMap, ok := r.byProgramEvent[event.Program]; ok {
-		if rules, ok := progMap[event.EventType]; ok {
-			return rules
+	if src, ok := r.index[event.LogSource]; ok {
+		if prog, ok := src[event.Program]; ok {
+			return prog[event.EventType]
 		}
 	}
 	return nil

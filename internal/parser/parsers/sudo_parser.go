@@ -13,6 +13,7 @@ var sudoUserKVRegex = regexp.MustCompile(`user=([a-zA-Z0-9_-]+)`)
 var sudoUserRegex = regexp.MustCompile(`^(\w+)\s:`)
 var sudoAttemptRegex = regexp.MustCompile(`(\d+) incorrect password attempts`)
 var sudoRuserRegex = regexp.MustCompile(`ruser=([a-zA-Z0-9_-]+)`)
+var sessionByRegex = regexp.MustCompile(`by (\w+)\(`)
 
 func SUDOParser(event *model.NormalizedEvent) *model.NormalizedEvent {
 
@@ -106,6 +107,11 @@ func extractAttemptCount(message string) int {
 
 func extractRUser(message string) string {
 	matches := sudoRuserRegex.FindStringSubmatch(message)
+	if len(matches) == 2 {
+		return matches[1]
+	}
+
+	matches = sessionByRegex.FindStringSubmatch(message)
 	if len(matches) == 2 {
 		return matches[1]
 	}

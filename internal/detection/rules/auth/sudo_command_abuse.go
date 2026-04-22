@@ -32,9 +32,35 @@ func (r *SudoCommandAbuseRule) Meta() detection.RuleMeta {
 	}
 }
 
+type sudoCommandAbuseState struct {
+	lastAbuseAlert map[string]time.Time
+	// cooldown fix fields
+	lastAlertID  map[string]string
+	runningCount map[string]int
+}
+
+func newSudoCommandAbuseState() *sudoCommandAbuseState {
+	return &sudoCommandAbuseState{
+		lastAbuseAlert: make(map[string]time.Time),
+		lastAlertID:    make(map[string]string),
+		runningCount:   make(map[string]int),
+	}
+}
+
+// typed accessor — initialises on first call, no rule ever calls SetPrivate directly
+func getSudoCommandAbuseState(ctx *context.DetectionContext) *sudoCommandAbuseState {
+	if v, ok := ctx.GetPrivate("sudo_command_abuse"); ok {
+		return v.(*sudoCommandAbuseState)
+	}
+	s := newSudoCommandAbuseState()
+	ctx.SetPrivate("sudo_command_abuse", s)
+	return s
+}
+
 func (r *SudoCommandAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
 
-	s := ctx.Sudo
+	s := getSudoCommandAbuseState(ctx)
+	commandsByUser := ctx.SudoShared.CommandsByUser
 	user := event.Username
 	now := event.Timestamp
 
@@ -43,44 +69,50 @@ func (r *SudoCommandAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 	}
 
 	// initialize map if needed
-	if s.CommandsByUser == nil {
-		s.CommandsByUser = make(map[string][]time.Time)
+	if commandsByUser == nil {
+		commandsByUser = make(map[string][]time.Time)
 	}
 
-	// track execution
-	s.CommandsByUser[user] = append(s.CommandsByUser[user], now)
+	ctx.SudoShared.CommandsByUser[user] = append(ctx.SudoShared.CommandsByUser[user], now)
+	ctx.SudoShared.CommandsByUser[user] = helper.PruneOld(ctx.SudoShared.CommandsByUser[user], now, r.Window)
+	count := len(ctx.SudoShared.CommandsByUser[user])
 
-	// prune old entries
-	s.CommandsByUser[user] = helper.PruneOld(s.CommandsByUser[user], now, r.Window)
+	if count < r.Threshold {
+		return nil
+	}
 
-	count := len(s.CommandsByUser[user])
+	last := s.lastAbuseAlert[user]
+	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
 
-	if count >= r.Threshold {
-
-		last := s.LastAbuseAlert[user]
-
-		// cooldown to avoid spam
-		if now.Sub(last) > r.Window {
-
-			alert := model.NewAlert(
-				"SUDO Command Abuse",
-				model.SeverityHigh,
-				"privilege",
-				fmt.Sprintf(
-					"User %s executed %d sudo commands within %v",
-					user,
-					count,
-					r.Window,
-				),
-				event,
-				count,
-			)
-
-			s.LastAbuseAlert[user] = now
-
-			return []*model.Alert{alert}
+	if inCooldown {
+		originalID := s.lastAlertID[user]
+		if originalID != "" {
+			return []*model.Alert{{
+				IsUpdate:        true,
+				OriginalAlertID: originalID,
+				EventCount:      count,
+			}}
 		}
+		return nil
 	}
 
-	return nil
+	newAlert := model.NewAlert(
+		"SUDO Command Abuse",
+		model.SeverityHigh,
+		"privilege",
+		fmt.Sprintf(
+			"User %s executed %d sudo commands within %v",
+			user,
+			count,
+			r.Window,
+		),
+		event,
+		count,
+	)
+
+	s.lastAbuseAlert[user] = now
+	s.lastAlertID[user] = newAlert.ID
+	s.runningCount[user] = 0
+
+	return []*model.Alert{newAlert}
 }

@@ -30,6 +30,9 @@ type Alert struct {
 	Host     string
 
 	EventCount int
+
+	IsUpdate        bool
+	OriginalAlertID string
 }
 
 func NewAlert(

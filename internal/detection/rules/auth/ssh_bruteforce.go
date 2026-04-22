@@ -32,35 +32,81 @@ func (r *SSHBruteForceRule) Meta() detection.RuleMeta {
 	}
 }
 
+type sshBruteState struct {
+	failedByIP    map[string][]time.Time
+	lastAlertByIP map[string]time.Time
+	// cooldown fix fields
+	lastAlertID  map[string]string
+	runningCount map[string]int
+}
+
+func newSSHBruteState() *sshBruteState {
+	return &sshBruteState{
+		failedByIP:    make(map[string][]time.Time),
+		lastAlertByIP: make(map[string]time.Time),
+		lastAlertID:   make(map[string]string),
+		runningCount:  make(map[string]int),
+	}
+}
+
+// typed accessor — initialises on first call, no rule ever calls SetPrivate directly
+func getSSHBruteState(ctx *context.DetectionContext) *sshBruteState {
+	if v, ok := ctx.GetPrivate("ssh_brute"); ok {
+		return v.(*sshBruteState)
+	}
+	s := newSSHBruteState()
+	ctx.SetPrivate("ssh_brute", s)
+	return s
+}
+
 func (r *SSHBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
 
-	s := ctx.SSH
+	s := getSSHBruteState(ctx)
 	ip := event.SourceIP
 	now := event.Timestamp
 
 	for i := 0; i < event.EventCount; i++ {
-		s.FailedByIP[ip] = append(s.FailedByIP[ip], now)
+		s.failedByIP[ip] = append(s.failedByIP[ip], now)
 	}
 
-	s.FailedByIP[ip] = helper.PruneOld(s.FailedByIP[ip], now, r.Window)
+	s.failedByIP[ip] = helper.PruneOld(s.failedByIP[ip], now, r.Window)
 
-	if len(s.FailedByIP[ip]) >= r.Threshold {
-		last := s.LastBruteForceAlert[ip]
-		if now.Sub(last) > r.Window {
+	if len(s.failedByIP[ip]) < r.Threshold {
+		return nil
+	}
 
-			alert := model.NewAlert(
-				"SSH Brute Force",
-				model.SeverityHigh,
-				"authentication",
-				fmt.Sprintf("Multiple failed SSH login attempts from %s", ip),
-				event,
-				len(s.FailedByIP[ip]),
-			)
+	last := s.lastAlertByIP[ip]
+	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
 
-			s.LastBruteForceAlert[ip] = now
-			return []*model.Alert{alert}
+	if inCooldown {
+		s.runningCount[ip] += event.EventCount
+
+		originalID := s.lastAlertID[ip]
+		if originalID != "" {
+			updatedCount := len(s.failedByIP[ip])
+			return []*model.Alert{{
+				IsUpdate:        true,
+				OriginalAlertID: originalID,
+				EventCount:      updatedCount,
+			}}
 		}
+		return nil
 	}
 
-	return nil
+	totalCount := len(s.failedByIP[ip])
+
+	newAlert := model.NewAlert(
+		"SSH Brute Force",
+		model.SeverityHigh,
+		"authentication",
+		fmt.Sprintf("Multiple failed SSH login attempts from %s", ip),
+		event,
+		totalCount,
+	)
+
+	s.lastAlertByIP[ip] = now
+	s.lastAlertID[ip] = newAlert.ID
+	s.runningCount[ip] = 0
+
+	return []*model.Alert{newAlert}
 }

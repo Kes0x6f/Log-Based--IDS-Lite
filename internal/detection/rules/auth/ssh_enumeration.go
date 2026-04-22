@@ -32,9 +32,36 @@ func (r *SSHEnumerationRule) Meta() detection.RuleMeta {
 	}
 }
 
+type sshEnumerationState struct {
+	failedUsersByIP      map[string]map[string]time.Time
+	lastEnumerationAlert map[string]time.Time
+	// cooldown fix fields
+	lastAlertID  map[string]string
+	runningCount map[string]int
+}
+
+func newSSHEnumerationState() *sshEnumerationState {
+	return &sshEnumerationState{
+		failedUsersByIP:      make(map[string]map[string]time.Time),
+		lastEnumerationAlert: make(map[string]time.Time),
+		lastAlertID:          make(map[string]string),
+		runningCount:         make(map[string]int),
+	}
+}
+
+// typed accessor — initialises on first call, no rule ever calls SetPrivate directly
+func getEnumerationState(ctx *context.DetectionContext) *sshEnumerationState {
+	if v, ok := ctx.GetPrivate("ssh_enumeration"); ok {
+		return v.(*sshEnumerationState)
+	}
+	s := newSSHEnumerationState()
+	ctx.SetPrivate("ssh_enumeration", s)
+	return s
+}
+
 func (r *SSHEnumerationRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
 
-	s := ctx.SSH
+	s := getEnumerationState(ctx)
 	ip := event.SourceIP
 	user := event.Username
 	now := event.Timestamp
@@ -43,30 +70,58 @@ func (r *SSHEnumerationRule) Evaluate(event *model.NormalizedEvent, ctx *context
 		return nil
 	}
 
-	if s.FailedUsersByIP[ip] == nil {
-		s.FailedUsersByIP[ip] = make(map[string]time.Time)
+	if s.failedUsersByIP[ip] == nil {
+		s.failedUsersByIP[ip] = make(map[string]time.Time)
 	}
 
-	s.FailedUsersByIP[ip][user] = now
+	s.failedUsersByIP[ip][user] = now
 	s.PruneUserEnumeration(ip, now, r.Window)
 
-	if len(s.FailedUsersByIP[ip]) >= r.Threshold {
-		last := s.LastEnumerationAlert[ip]
-		if now.Sub(last) > r.Window {
-
-			alert := model.NewAlert(
-				"SSH Username Enumeration",
-				model.SeverityHigh,
-				"authentication",
-				fmt.Sprintf("Multiple username attempts from %s", ip),
-				event,
-				len(s.FailedUsersByIP[ip]),
-			)
-
-			s.LastEnumerationAlert[ip] = now
-			return []*model.Alert{alert}
-		}
+	if len(s.failedUsersByIP[ip]) < r.Threshold {
+		return nil
 	}
 
-	return nil
+	last := s.lastEnumerationAlert[ip]
+	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+
+	if inCooldown {
+		s.runningCount[ip] += event.EventCount
+
+		originalID := s.lastAlertID[ip]
+		if originalID != "" {
+			updatedCount := len(s.failedUsersByIP[ip])
+			return []*model.Alert{{
+				IsUpdate:        true,
+				OriginalAlertID: originalID,
+				EventCount:      updatedCount,
+			}}
+		}
+		return nil
+	}
+
+	totalCount := len(s.failedUsersByIP[ip])
+	newAlert := model.NewAlert(
+		"SSH Username Enumeration",
+		model.SeverityHigh,
+		"authentication",
+		fmt.Sprintf("Multiple username attempts from %s", ip),
+		event,
+		totalCount,
+	)
+	s.lastEnumerationAlert[ip] = now
+	s.lastAlertID[ip] = newAlert.ID
+	s.runningCount[ip] = 0
+
+	return []*model.Alert{newAlert}
+}
+
+func (s *sshEnumerationState) PruneUserEnumeration(ip string, now time.Time, window time.Duration) {
+
+	users := s.failedUsersByIP[ip]
+
+	for user, t := range users {
+		if now.Sub(t) > window {
+			delete(users, user)
+		}
+	}
 }

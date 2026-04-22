@@ -32,9 +32,36 @@ func (r *SSHDistributedBruteForceRule) Meta() detection.RuleMeta {
 	}
 }
 
+type sshDistributedState struct {
+	ipsByUser            map[string]map[string]time.Time
+	lastDistributedAlert map[string]time.Time
+	// cooldown fix fields
+	lastAlertID  map[string]string
+	runningCount map[string]int
+}
+
+func newSSHDistributedState() *sshDistributedState {
+	return &sshDistributedState{
+		ipsByUser:            make(map[string]map[string]time.Time),
+		lastDistributedAlert: make(map[string]time.Time),
+		lastAlertID:          make(map[string]string),
+		runningCount:         make(map[string]int),
+	}
+}
+
+// typed accessor — initialises on first call, no rule ever calls SetPrivate directly
+func getSSHDistributedState(ctx *context.DetectionContext) *sshDistributedState {
+	if v, ok := ctx.GetPrivate("ssh_distributed"); ok {
+		return v.(*sshDistributedState)
+	}
+	s := newSSHDistributedState()
+	ctx.SetPrivate("ssh_distributed", s)
+	return s
+}
+
 func (r *SSHDistributedBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
 
-	s := ctx.SSH
+	s := getSSHDistributedState(ctx)
 	ip := event.SourceIP
 	user := event.Username
 	now := event.Timestamp
@@ -45,41 +72,54 @@ func (r *SSHDistributedBruteForceRule) Evaluate(event *model.NormalizedEvent, ct
 	}
 
 	// initialize map if needed
-	if s.IPsByUser[user] == nil {
-		s.IPsByUser[user] = make(map[string]time.Time)
+	if s.ipsByUser[user] == nil {
+		s.ipsByUser[user] = make(map[string]time.Time)
 	}
 
 	// record this IP attacking this user
-	s.IPsByUser[user][ip] = now
+	s.ipsByUser[user][ip] = now
 
 	// prune old IPs (outside time window)
-	for k, t := range s.IPsByUser[user] {
+	for k, t := range s.ipsByUser[user] {
 		if now.Sub(t) > r.Window {
-			delete(s.IPsByUser[user], k)
+			delete(s.ipsByUser[user], k)
 		}
 	}
 
-	// check threshold (number of unique IPs)
-	if len(s.IPsByUser[user]) >= r.Threshold {
-
-		last := s.LastDistributedAlert[user]
-
-		if now.Sub(last) > r.Window {
-
-			alert := model.NewAlert(
-				"Distributed Brute Force",
-				model.SeverityHigh,
-				"authentication",
-				fmt.Sprintf("Multiple IPs targeting user %s", user),
-				event,
-				len(s.IPsByUser[user]),
-			)
-
-			s.LastDistributedAlert[user] = now
-
-			return []*model.Alert{alert}
-		}
+	if len(s.ipsByUser[user]) < r.Threshold {
+		return nil
 	}
 
-	return nil
+	last := s.lastDistributedAlert[user]
+	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+
+	if inCooldown {
+		s.runningCount[user] += event.EventCount
+
+		originalID := s.lastAlertID[user]
+		if originalID != "" {
+			updatedCount := len(s.ipsByUser[user])
+			return []*model.Alert{{
+				IsUpdate:        true,
+				OriginalAlertID: originalID,
+				EventCount:      updatedCount,
+			}}
+		}
+		return nil
+	}
+
+	totalCount := len(s.ipsByUser[user])
+	newAlert := model.NewAlert(
+		"Distributed Brute Force",
+		model.SeverityHigh,
+		"authentication",
+		fmt.Sprintf("Multiple IPs targeting user %s", user),
+		event,
+		totalCount,
+	)
+	s.lastDistributedAlert[user] = now
+	s.lastAlertID[user] = newAlert.ID
+	s.runningCount[user] = 0
+
+	return []*model.Alert{newAlert}
 }

@@ -33,75 +33,96 @@ func (r *SudoSessionAbuseRule) Meta() detection.RuleMeta {
 	}
 }
 
+type sudoSessionAbuseState struct {
+	lastExecByUser      map[string][]time.Time
+	sessionStartsByUser map[string][]time.Time
+	lastSessionAlert    map[string]time.Time
+	lastAlertID         map[string]string
+	runningCount        map[string]int
+}
+
+func newSudoSessionAbuseState() *sudoSessionAbuseState {
+	return &sudoSessionAbuseState{
+		lastExecByUser:      make(map[string][]time.Time),
+		sessionStartsByUser: make(map[string][]time.Time),
+		lastSessionAlert:    make(map[string]time.Time),
+		lastAlertID:         make(map[string]string),
+		runningCount:        make(map[string]int),
+	}
+}
+
+func getSudoSessionAbuseState(ctx *context.DetectionContext) *sudoSessionAbuseState {
+	if v, ok := ctx.GetPrivate("sudo_session_abuse"); ok {
+		return v.(*sudoSessionAbuseState)
+	}
+	s := newSudoSessionAbuseState()
+	ctx.SetPrivate("sudo_session_abuse", s)
+	return s
+}
+
 func (r *SudoSessionAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
 
-	s := ctx.Sudo
+	s := getSudoSessionAbuseState(ctx)
 	now := event.Timestamp
 
 	switch event.EventType {
 
-	// TRACK EXEC
 	case "SUDO_EXEC":
-
 		user := event.Username
 		if user == "" {
 			return nil
 		}
-
-		if s.LastExecByUser == nil {
-			s.LastExecByUser = make(map[string][]time.Time)
-		}
-
-		s.LastExecByUser[user] = append(s.LastExecByUser[user], now)
-
+		s.lastExecByUser[user] = append(s.lastExecByUser[user], now)
 		return nil
 
-	// DETECT SESSION ABUSE
 	case "SUDO_SESSION_START":
-
-		if s.SessionStartsByUser == nil {
-			s.SessionStartsByUser = make(map[string][]time.Time)
-		}
-
-		for u, execTimes := range s.LastExecByUser {
+		for u, execTimes := range s.lastExecByUser {
 
 			var remainingExecs []time.Time
 
 			for _, execTime := range execTimes {
 
-				if now.Sub(execTime) <= 5*time.Second {
+				if now.Sub(execTime) <= 100*time.Second {
 
-					// correlate → session start belongs to user u
+					s.sessionStartsByUser[u] = append(s.sessionStartsByUser[u], now)
+					s.sessionStartsByUser[u] = helper.PruneOld(s.sessionStartsByUser[u], now, r.Window)
 
-					s.SessionStartsByUser[u] = append(s.SessionStartsByUser[u], now)
-					s.SessionStartsByUser[u] = helper.PruneOld(s.SessionStartsByUser[u], now, r.Window)
-
-					count := len(s.SessionStartsByUser[u])
+					count := len(s.sessionStartsByUser[u])
 
 					if count >= r.Threshold {
 
-						last := s.LastSessionAlert[u]
+						last := s.lastSessionAlert[u]
+						inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
 
-						if last.IsZero() || now.Sub(last) > r.Window {
-
-							alert := model.NewAlert(
-								"SUDO Session Abuse",
-								model.SeverityMedium,
-								"privilege",
-								fmt.Sprintf(
-									"User %s opened %d sudo sessions within %v",
-									u,
-									count,
-									r.Window,
-								),
-								event,
-								count,
-							)
-
-							s.LastSessionAlert[u] = now
-
-							return []*model.Alert{alert}
+						if inCooldown {
+							if id := s.lastAlertID[u]; id != "" {
+								return []*model.Alert{{
+									IsUpdate:        true,
+									OriginalAlertID: id,
+									EventCount:      count,
+								}}
+							}
+							return nil
 						}
+
+						alert := model.NewAlert(
+							"SUDO Session Abuse",
+							model.SeverityMedium,
+							"privilege",
+							fmt.Sprintf(
+								"User %s opened %d sudo sessions within %v",
+								u,
+								count,
+								r.Window,
+							),
+							event,
+							count,
+						)
+
+						s.lastSessionAlert[u] = now
+						s.lastAlertID[u] = alert.ID
+
+						return []*model.Alert{alert}
 					}
 
 				} else {
@@ -109,7 +130,7 @@ func (r *SudoSessionAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 				}
 			}
 
-			s.LastExecByUser[u] = remainingExecs
+			s.lastExecByUser[u] = remainingExecs
 		}
 	}
 

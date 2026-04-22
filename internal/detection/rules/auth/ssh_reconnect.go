@@ -32,46 +32,87 @@ func (r *SSHReconnectRule) Meta() detection.RuleMeta {
 	}
 }
 
+type sshReconnectState struct {
+	disconnectsByIP    map[string][]time.Time
+	lastReconnectAlert map[string]time.Time
+	// cooldown fix fields
+	lastAlertID  map[string]string
+	runningCount map[string]int
+}
+
+func newSSHReconnectState() *sshReconnectState {
+	return &sshReconnectState{
+		disconnectsByIP:    make(map[string][]time.Time),
+		lastReconnectAlert: make(map[string]time.Time),
+		lastAlertID:        make(map[string]string),
+		runningCount:       make(map[string]int),
+	}
+}
+
+// typed accessor — initialises on first call, no rule ever calls SetPrivate directly
+func getSSHReconnectState(ctx *context.DetectionContext) *sshReconnectState {
+	if v, ok := ctx.GetPrivate("ssh_reconnect"); ok {
+		return v.(*sshReconnectState)
+	}
+	s := newSSHReconnectState()
+	ctx.SetPrivate("ssh_reconnect", s)
+	return s
+}
+
 func (r *SSHReconnectRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
 
-	s := ctx.SSH
+	s := getSSHReconnectState(ctx)
 	ip := event.SourceIP
 	now := event.Timestamp
 
 	// initialize if needed
-	if s.DisconnectsByIP[ip] == nil {
-		s.DisconnectsByIP[ip] = []time.Time{}
+	if s.disconnectsByIP[ip] == nil {
+		s.disconnectsByIP[ip] = []time.Time{}
 	}
 
 	// track disconnects
 	for i := 0; i < event.EventCount; i++ {
-		s.DisconnectsByIP[ip] = append(s.DisconnectsByIP[ip], now)
+		s.disconnectsByIP[ip] = append(s.disconnectsByIP[ip], now)
 	}
 
 	// prune old entries (sliding window)
-	s.DisconnectsByIP[ip] = helper.PruneOld(s.DisconnectsByIP[ip], now, r.Window)
+	s.disconnectsByIP[ip] = helper.PruneOld(s.disconnectsByIP[ip], now, r.Window)
 
-	// threshold check
-	if len(s.DisconnectsByIP[ip]) >= r.Threshold {
-
-		last := s.LastReconnectAlert[ip]
-
-		if now.Sub(last) > r.Window {
-
-			alert := model.NewAlert(
-				"SSH Rapid Reconnect Attack",
-				model.SeverityHigh,
-				"authentication",
-				fmt.Sprintf("Frequent reconnect attempts from %s", ip),
-				event,
-				len(s.DisconnectsByIP[ip]),
-			)
-
-			s.LastReconnectAlert[ip] = now
-
-			return []*model.Alert{alert}
-		}
+	if len(s.disconnectsByIP[ip]) < r.Threshold {
+		return nil
 	}
 
-	return nil
+	last := s.lastReconnectAlert[ip]
+	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+
+	if inCooldown {
+		s.runningCount[ip] += event.EventCount
+
+		originalID := s.lastAlertID[ip]
+		if originalID != "" {
+			updatedCount := len(s.disconnectsByIP[ip])
+			return []*model.Alert{{
+				IsUpdate:        true,
+				OriginalAlertID: originalID,
+				EventCount:      updatedCount,
+			}}
+		}
+		return nil
+	}
+
+	totalCount := len(s.disconnectsByIP[ip])
+	newAlert := model.NewAlert(
+		"SSH Rapid Reconnect Attack",
+		model.SeverityHigh,
+		"authentication",
+		fmt.Sprintf("Frequent reconnect attempts from %s", ip),
+		event,
+		totalCount,
+	)
+
+	s.lastReconnectAlert[ip] = now
+	s.lastAlertID[ip] = newAlert.ID
+	s.runningCount[ip] = 0
+
+	return []*model.Alert{newAlert}
 }

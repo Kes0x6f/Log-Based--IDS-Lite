@@ -7,7 +7,6 @@ import (
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection/context"
-	"github.com/Kes0x6f/Log-Based--IDS/internal/helper"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 )
 
@@ -40,13 +39,15 @@ func (r *SudoSensitiveCommandRule) Meta() detection.RuleMeta {
 		},
 	}
 }
-func calculateRisk(cmd string, user string, ctx *context.DetectionContext) int {
+func calculateRisk(cmd string, user string, shared *context.SharedSudoContext) int {
 
 	score := -1
 	baseCmd := extractBaseCommand(cmd)
 
 	for _, c := range sensitiveCommands {
-		if baseCmd == c.Pattern || strings.HasPrefix(cmd, c.Pattern) {
+		patternIsMultiWord := strings.Contains(c.Pattern, " ")
+		if (!patternIsMultiWord && baseCmd == c.Pattern) ||
+			(patternIsMultiWord && strings.Contains(cmd, c.Pattern)) {
 			score = c.Score
 			break
 		}
@@ -58,13 +59,13 @@ func calculateRisk(cmd string, user string, ctx *context.DetectionContext) int {
 	}
 
 	// Behavior Context
-	failures := len(ctx.Sudo.RecentFails[user])
+	failures := len(shared.RecentFails[user])
 	if failures >= 3 {
 		score += 20
 	}
 
 	//  Frequency Context
-	execCount := len(ctx.Sudo.CommandsByUser[user])
+	execCount := len(shared.CommandsByUser[user])
 	if execCount >= 5 {
 		score += 10
 	}
@@ -90,27 +91,21 @@ func (r *SudoSensitiveCommandRule) Evaluate(event *model.NormalizedEvent, ctx *c
 
 	cmd := event.Command
 	user := event.Username
-	now := event.Timestamp
 
 	if cmd == "" || user == "" {
 		return nil
 	}
 
-	if ctx.Sudo.CommandsByUser == nil {
-		ctx.Sudo.CommandsByUser = make(map[string][]time.Time)
+	if ctx.SudoShared.CommandsByUser == nil {
+		ctx.SudoShared.CommandsByUser = make(map[string][]time.Time)
 	}
 
 	// Track command frequency
-	if ctx.Sudo.CommandsByUser[user] == nil {
-		ctx.Sudo.CommandsByUser[user] = []time.Time{}
+	if ctx.SudoShared.CommandsByUser[user] == nil {
+		ctx.SudoShared.CommandsByUser[user] = []time.Time{}
 	}
-
-	ctx.Sudo.CommandsByUser[user] = append(ctx.Sudo.CommandsByUser[user], now)
-	ctx.Sudo.CommandsByUser[user] = helper.PruneOld(ctx.Sudo.CommandsByUser[user], now, 5*time.Minute)
-
-	// Calculate risk
 	cmd = strings.ToLower(strings.TrimSpace(cmd))
-	score := calculateRisk(cmd, user, ctx)
+	score := calculateRisk(cmd, user, ctx.SudoShared)
 
 	if score == 0 {
 		return nil

@@ -34,48 +34,55 @@ func (r *SudoSuccessAfterFailRule) Meta() detection.RuleMeta {
 	}
 }
 
+type sudoSuccessAfterFailState struct {
+	lastExecByUser map[string][]time.Time
+	lastAlert      map[string]time.Time
+	lastAlertID    map[string]string
+}
+
+func newSudoSuccessAfterFailState() *sudoSuccessAfterFailState {
+	return &sudoSuccessAfterFailState{
+		lastExecByUser: make(map[string][]time.Time),
+		lastAlert:      make(map[string]time.Time),
+		lastAlertID:    make(map[string]string),
+	}
+}
+
+func getSudoSuccessAfterFailState(ctx *context.DetectionContext) *sudoSuccessAfterFailState {
+	if v, ok := ctx.GetPrivate("sudo_success_after_fail"); ok {
+		return v.(*sudoSuccessAfterFailState)
+	}
+	s := newSudoSuccessAfterFailState()
+	ctx.SetPrivate("sudo_success_after_fail", s)
+	return s
+}
+
 func (r *SudoSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
 
-	s := ctx.Sudo
+	s := getSudoSuccessAfterFailState(ctx)
+	recentFails := ctx.SudoShared.RecentFails
 	user := event.Username
 	now := event.Timestamp
 
-	if event.EventType != "SUDO_SESSION_START" && user == "" {
-		return nil
-	}
 	switch event.EventType {
 
-	// TRACK FAILURES
 	case "SUDO_FAIL":
-
-		if s.RecentFails[user] == nil {
-			s.RecentFails[user] = []time.Time{}
-		}
-
-		s.RecentFails[user] = append(s.RecentFails[user], now)
-
-		// prune old entries
-		s.RecentFails[user] = helper.PruneOld(s.RecentFails[user], now, r.Window)
-
-		return nil
-
-	case "SUDO_EXEC":
-
 		if user == "" {
 			return nil
 		}
-
-		if s.LastExecByUser == nil {
-			s.LastExecByUser = make(map[string][]time.Time)
-		}
-
-		s.LastExecByUser[user] = append(s.LastExecByUser[user], now)
-
+		recentFails[user] = append(recentFails[user], now)
+		recentFails[user] = helper.PruneOld(recentFails[user], now, r.Window)
 		return nil
 
-	// DETECT SUCCESS AFTER FAIL
+	case "SUDO_EXEC":
+		if user == "" {
+			return nil
+		}
+		s.lastExecByUser[user] = append(s.lastExecByUser[user], now)
+		return nil
+
 	case "SUDO_SESSION_START":
-		for u, execTimes := range s.LastExecByUser {
+		for u, execTimes := range s.lastExecByUser {
 
 			var remaining []time.Time
 
@@ -83,50 +90,56 @@ func (r *SudoSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *c
 
 				if now.Sub(execTime) <= 10*time.Second {
 
-					// ✅ MATCH FOUND
+					// correlated user u — check if they had prior failures
+					failCount := len(recentFails[u])
 
-					if s.RootSessionsByUser[u] == nil {
-						s.RootSessionsByUser[u] = []time.Time{}
-					}
+					if failCount >= r.Threshold {
 
-					s.RootSessionsByUser[u] = append(s.RootSessionsByUser[u], now)
-					s.RootSessionsByUser[u] = helper.PruneOld(s.RootSessionsByUser[u], now, r.Window)
+						last := s.lastAlert[u]
+						inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
 
-					count := len(s.RootSessionsByUser[u])
-
-					if count >= r.Threshold {
-
-						last := s.LastRootAlert[u]
-
-						if last.IsZero() || now.Sub(last) > r.Window {
-
-							alert := model.NewAlert(
-								"SUDO Root Abuse",
-								model.SeverityHigh,
-								"privilege",
-								fmt.Sprintf(
-									"User %s escalated to root %d times within %v",
-									u,
-									count,
-									r.Window,
-								),
-								event,
-								count,
-							)
-
-							s.LastRootAlert[u] = now
-
-							return []*model.Alert{alert}
+						if inCooldown {
+							if id := s.lastAlertID[u]; id != "" {
+								return []*model.Alert{{
+									IsUpdate:        true,
+									OriginalAlertID: id,
+									EventCount:      failCount,
+								}}
+							}
+							return nil
 						}
+
+						alert := model.NewAlert(
+							"SUDO Success After Failure",
+							model.SeverityHigh,
+							"privilege",
+							fmt.Sprintf(
+								"User %s succeeded with sudo after %d failed attempts",
+								u,
+								failCount,
+							),
+							event,
+							failCount,
+						)
+
+						s.lastAlert[u] = now
+						s.lastAlertID[u] = alert.ID
+
+						// clear failures for this user — the session succeeded
+						delete(recentFails, u)
+
+						return []*model.Alert{alert}
 					}
+
+					// below threshold — still clear failures, session is clean
+					delete(recentFails, u)
 
 				} else {
-					// keep unmatched exec
 					remaining = append(remaining, execTime)
 				}
 			}
 
-			s.LastExecByUser[u] = remaining
+			s.lastExecByUser[u] = remaining
 		}
 	}
 

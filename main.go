@@ -68,6 +68,7 @@ func main() {
 		rule.NewSudoSensitiveCommandRule(),
 		rule.NewSudoCommandAbuseRule(),
 		rule.NewSudoRootAbuseRule(),
+		rule.NewSudoSessionAbuseRule(),
 	})
 
 	for _, c := range filecollector {

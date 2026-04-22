@@ -156,3 +156,9 @@ func (r *AlertRepository) CountUniqueIPs() (int, error) {
 	err := r.DB.QueryRow(query).Scan(&count)
 	return count, err
 }
+
+func (r *AlertRepository) UpdateEventCount(id string, count int) error {
+	query := `UPDATE alerts SET event_count = ? WHERE id = ?`
+	_, err := r.DB.Exec(query, count, id)
+	return err
+}

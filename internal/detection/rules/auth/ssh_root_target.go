@@ -31,48 +31,78 @@ func (r *SSHRootTargetRule) Meta() detection.RuleMeta {
 	}
 }
 
+type sshRootTargetState struct {
+	rootFailures        map[string][]time.Time
+	lastRootTargetAlert map[string]time.Time
+	lastAlertID         map[string]string
+	runningCount        map[string]int
+}
+
+func newSSHRootTargetState() *sshRootTargetState {
+	return &sshRootTargetState{
+		rootFailures:        make(map[string][]time.Time),
+		lastRootTargetAlert: make(map[string]time.Time),
+		lastAlertID:         make(map[string]string),
+		runningCount:        make(map[string]int),
+	}
+}
+
+func getSSHRootTargetState(ctx *context.DetectionContext) *sshRootTargetState {
+	if v, ok := ctx.GetPrivate("ssh_root_target"); ok {
+		return v.(*sshRootTargetState)
+	}
+	s := newSSHRootTargetState()
+	ctx.SetPrivate("ssh_root_target", s)
+	return s
+}
+
 func (r *SSHRootTargetRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
 
-	s := ctx.SSH
+	s := getSSHRootTargetState(ctx)
 	ip := event.SourceIP
 	user := event.Username
 	now := event.Timestamp
 
-	// only care about root
 	if user != "root" {
 		return nil
 	}
 
-	// track root targeting attempts
-	if s.RootFailures[ip] == nil {
-		s.RootFailures[ip] = []time.Time{}
+	if s.rootFailures[ip] == nil {
+		s.rootFailures[ip] = []time.Time{}
 	}
 
 	for i := 0; i < event.EventCount; i++ {
-		s.RootFailures[ip] = append(s.RootFailures[ip], now)
+		s.rootFailures[ip] = append(s.rootFailures[ip], now)
 	}
 
-	// prune old entries
-	s.RootFailures[ip] = helper.PruneOld(s.RootFailures[ip], now, r.Window)
+	s.rootFailures[ip] = helper.PruneOld(s.rootFailures[ip], now, r.Window)
 
-	// cooldown check (prevents spam)
-	last := s.LastRootTargetAlert[ip]
+	last := s.lastRootTargetAlert[ip]
+	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
 
-	if now.Sub(last) > r.Window {
-
-		alert := model.NewAlert(
-			"SSH Root Targeting",
-			model.SeverityHigh,
-			"authentication",
-			fmt.Sprintf("SSH root account targeted from %s", ip),
-			event,
-			len(s.RootFailures[ip]),
-		)
-
-		s.LastRootTargetAlert[ip] = now
-
-		return []*model.Alert{alert}
+	if inCooldown {
+		originalID := s.lastAlertID[ip]
+		if originalID != "" {
+			return []*model.Alert{{
+				IsUpdate:        true,
+				OriginalAlertID: originalID,
+				EventCount:      len(s.rootFailures[ip]),
+			}}
+		}
+		return nil
 	}
 
-	return nil
+	newAlert := model.NewAlert(
+		"SSH Root Targeting",
+		model.SeverityHigh,
+		"authentication",
+		fmt.Sprintf("SSH root account targeted from %s", ip),
+		event,
+		len(s.rootFailures[ip]),
+	)
+
+	s.lastRootTargetAlert[ip] = now
+	s.lastAlertID[ip] = newAlert.ID
+
+	return []*model.Alert{newAlert}
 }

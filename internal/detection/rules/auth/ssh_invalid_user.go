@@ -32,46 +32,86 @@ func (r *SSHInvalidUserRule) Meta() detection.RuleMeta {
 	}
 }
 
+type sshInvalidUserState struct {
+	invalidUserAttempts  map[string][]time.Time
+	lastInvalidUserAlert map[string]time.Time
+	// cooldown fix fields
+	lastAlertID  map[string]string
+	runningCount map[string]int
+}
+
+func newSSHInvalidUserState() *sshInvalidUserState {
+	return &sshInvalidUserState{
+		invalidUserAttempts:  make(map[string][]time.Time),
+		lastInvalidUserAlert: make(map[string]time.Time),
+		lastAlertID:          make(map[string]string),
+		runningCount:         make(map[string]int),
+	}
+}
+
+// typed accessor — initialises on first call, no rule ever calls SetPrivate directly
+func getSSHInvalidUserState(ctx *context.DetectionContext) *sshInvalidUserState {
+	if v, ok := ctx.GetPrivate("ssh_invalid_user"); ok {
+		return v.(*sshInvalidUserState)
+	}
+	s := newSSHInvalidUserState()
+	ctx.SetPrivate("ssh_invalid_user", s)
+	return s
+}
+
 func (r *SSHInvalidUserRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
 
-	s := ctx.SSH
+	s := getSSHInvalidUserState(ctx)
 	ip := event.SourceIP
 	now := event.Timestamp
 
 	// initialize if needed
-	if s.InvalidUserAttempts[ip] == nil {
-		s.InvalidUserAttempts[ip] = []time.Time{}
+	if s.invalidUserAttempts[ip] == nil {
+		s.invalidUserAttempts[ip] = []time.Time{}
 	}
 
 	// track attempts
 	for i := 0; i < event.EventCount; i++ {
-		s.InvalidUserAttempts[ip] = append(s.InvalidUserAttempts[ip], now)
+		s.invalidUserAttempts[ip] = append(s.invalidUserAttempts[ip], now)
 	}
 
 	// prune old entries (sliding window)
-	s.InvalidUserAttempts[ip] = helper.PruneOld(s.InvalidUserAttempts[ip], now, r.Window)
+	s.invalidUserAttempts[ip] = helper.PruneOld(s.invalidUserAttempts[ip], now, r.Window)
 
-	// threshold check
-	if len(s.InvalidUserAttempts[ip]) >= r.Threshold {
+	if len(s.invalidUserAttempts[ip]) < r.Threshold {
+		return nil
+	}
+	last := s.lastInvalidUserAlert[ip]
+	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
 
-		last := s.LastInvalidUserAlert[ip]
+	if inCooldown {
+		s.runningCount[ip] += event.EventCount
 
-		if now.Sub(last) > r.Window {
-
-			alert := model.NewAlert(
-				"Invalid User Brute Force",
-				model.SeverityMedium,
-				"authentication",
-				fmt.Sprintf("Multiple invalid user attempts from %s", ip),
-				event,
-				len(s.InvalidUserAttempts[ip]),
-			)
-
-			s.LastInvalidUserAlert[ip] = now
-
-			return []*model.Alert{alert}
+		originalID := s.lastAlertID[ip]
+		if originalID != "" {
+			updatedCount := len(s.invalidUserAttempts[ip])
+			return []*model.Alert{{
+				IsUpdate:        true,
+				OriginalAlertID: originalID,
+				EventCount:      updatedCount,
+			}}
 		}
+		return nil
 	}
 
-	return nil
+	totalCount := len(s.invalidUserAttempts[ip])
+	newAlert := model.NewAlert(
+		"Invalid User Brute Force",
+		model.SeverityMedium,
+		"authentication",
+		fmt.Sprintf("Multiple invalid user attempts from %s", ip),
+		event,
+		totalCount,
+	)
+
+	s.lastInvalidUserAlert[ip] = now
+	s.lastAlertID[ip] = newAlert.ID
+	s.runningCount[ip] = 0
+
+	return []*model.Alert{newAlert}
 }
