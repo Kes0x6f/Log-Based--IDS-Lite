@@ -21,8 +21,24 @@ var isoHeaderRegex = regexp.MustCompile(
 )
 
 var programParsers = map[string]func(*model.NormalizedEvent) *model.NormalizedEvent{
+	//remote access
 	"sshd": parsers.SSHParser,
+
+	//escalated privilage abuse via sudo
 	"sudo": parsers.SUDOParser,
+
+	// privilege escalation via su
+	"su": parsers.SUParser,
+
+	// account / group / credential events
+	"useradd": parsers.UserAddParser,
+	"userdel": parsers.UserDelParser,
+	"usermod": parsers.UserModParser,
+	"passwd":  parsers.PasswdParser,
+
+	// ── ufw.log + kern.log
+	// KernParser delegates UFW lines to UFWParser internally.
+	"kernel": parsers.KernParser,
 }
 
 type Parser interface {
@@ -34,6 +50,18 @@ func ParserWorker(input <-chan collector.RawLog, output chan<- *model.Normalized
 	for log := range input {
 
 		line := strings.TrimSpace(log.Message)
+
+		// ── Fast path: raw audit.log lines ──────────────────────────────────
+		// Raw audit.log records start with "type=" and have no syslog header.
+		// The source tag "audit" is assigned by the FileCollector for this file.
+		if log.Source == "audit" && strings.HasPrefix(line, "type=") {
+			event := parsers.ParseRawAuditLine(line, log.Source)
+			if event != nil && event.EventType != "" {
+				output <- event
+			}
+			continue
+		}
+
 		var matches []string
 		var timestampStr string
 
