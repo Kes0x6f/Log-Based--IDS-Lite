@@ -102,6 +102,12 @@ func parseAuditRecord(line string, event *model.NormalizedEvent) *model.Normaliz
 		return event // unrecognised key — rule registry will skip
 	}
 
+	// cap_prm=0000000000000000  (permitted capability set, hex)
+	var auditCapPrmRe = regexp.MustCompile(`\bcap_prm=([0-9a-f]+)`)
+
+	// cap_eff=0000000000000000  (effective capability set, hex)
+	var auditCapEffRe = regexp.MustCompile(`\bcap_eff=([0-9a-f]+)`)
+
 	// FIX: Resolve username unconditionally before the record-type switch.
 	// Previously this was only called inside the SYSCALL branch, which meant
 	// all PATH-based events (FILE_READ, FILE_WRITE, CRON_WRITE, SERVICE_WRITE,
@@ -168,6 +174,19 @@ func parseAuditRecord(line string, event *model.NormalizedEvent) *model.Normaliz
 			event.EventType = eventType
 			event.Command = exe
 		}
+	case "CAPSET":
+		// Only process if the audit key is "capset"
+		if eventType != "CAPSET" {
+			return event
+		}
+		// Extract capability sets from the CAPSET record itself
+		capPrm := auditField(auditCapPrmRe, line)
+		capEff := auditField(auditCapEffRe, line)
+
+		// Store them in Message so the rule can read them
+		// Format: "cap_prm=<hex> cap_eff=<hex>"
+		event.EventType = "CAPSET"
+		event.Message = "cap_prm=" + capPrm + " cap_eff=" + capEff
 	}
 
 	return event

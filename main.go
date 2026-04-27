@@ -1,7 +1,12 @@
 package main
 
 import (
+	"context"
 	"log"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/alert"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/api"
@@ -18,8 +23,21 @@ import (
 )
 
 func main() {
-
 	log.Println("MAIN STARTED")
+
+	// ── Context & signal handling ────────────────────────────────────────────
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigCh
+		log.Printf("received signal %v — shutting down", sig)
+		cancel()
+	}()
+
+	// ── Database ─────────────────────────────────────────────────────────────
 	db, err := database.InitDB("data/ids.db")
 	if err != nil {
 		log.Fatal(err)
@@ -39,28 +57,18 @@ func main() {
 		Repo:        alertRepo,
 		Broadcaster: broadcaster,
 	}
-
 	router := api.NewRouter(apiHandler)
-
-	server := &api.Server{
-		Handler: router,
-	}
-
+	server := &api.Server{Handler: router}
 	go server.Start(":8888")
 
 	rawLogChan := make(chan collector.RawLog, 1000)
 	parseChan := make(chan *model.NormalizedEvent, 1000)
 	alertChan := make(chan *model.Alert, 1000)
 
-	filecollector := []collector.FileCollector{
+	filecollectors := []collector.FileCollector{
 		{
 			FilePath:    "/var/log/auth.log",
 			Source:      "auth",
-			Broadcaster: broadcaster,
-		},
-		{
-			FilePath:    "/var/log/ufw.log",
-			Source:      "ufw",
 			Broadcaster: broadcaster,
 		},
 		{
@@ -68,23 +76,19 @@ func main() {
 			Source:      "kern",
 			Broadcaster: broadcaster,
 		},
-		//{
-		//	// Raw auditd log — ParserWorker detects "type=..." lines from this
-		//	// source and bypasses the syslog header regex automatically.
-		//	FilePath:    "/var/log/audit/audit.log",
-		//	Source:      "audit",
-		//	Broadcaster: broadcaster,
-		//},
 		{
-			// Apache2 access log — Combined Log Format, no syslog header.
-			// Comment out if Apache is not installed.
+			// Raw auditd log — ParserWorker detects "type=..." lines and
+			// bypasses the syslog header regex automatically.
+			FilePath:    "/var/log/audit/audit.log",
+			Source:      "audit",
+			Broadcaster: broadcaster,
+		},
+		{
 			FilePath:    "/var/log/apache2/access.log",
 			Source:      "apache2",
 			Broadcaster: broadcaster,
 		},
 		{
-			// Nginx access log — same Combined Log Format as Apache.
-			// Comment out if Nginx is not installed.
 			FilePath:    "/var/log/nginx/access.log",
 			Source:      "nginx",
 			Broadcaster: broadcaster,
@@ -115,7 +119,7 @@ func main() {
 
 		// ── Account / credential ─────────────────────────────────────────────
 		authrule.NewAccountCreatedRule(),
-		authrule.NewGroupModifiedRule(), // was duplicated in previous main.go — fixed
+		authrule.NewGroupModifiedRule(),
 		authrule.NewPasswdChangedRule(),
 
 		// ── UFW / Firewall ───────────────────────────────────────────────────
@@ -150,12 +154,35 @@ func main() {
 		webrule.NewWebFloodRule(),
 	})
 
-	for _, c := range filecollector {
+	for _, c := range filecollectors {
 		go c.Start(rawLogChan)
 	}
+
+	// ── NFLOG collector ───────────────────────────────────────────────────────
+	// We use a WaitGroup so main() blocks until NFLOGCollector.Start returns
+	// and its deferred teardown() removes the iptables rules.
+	// Without this, main() exits the moment ctx is cancelled and the process
+	// is killed before defer teardown() can run — leaving stale iptables rules.
+	nflogCollector := &collector.NFLOGCollector{
+		Broadcaster: broadcaster,
+	}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		nflogCollector.Start(ctx, parseChan)
+	}()
 
 	go parser.ParserWorker(rawLogChan, parseChan)
 	go engine.Process(parseChan, alertChan)
 	go alertManager.Start(alertChan)
-	select {}
+
+	// Block until signal received.
+	<-ctx.Done()
+
+	// Wait for NFLOGCollector to finish its deferred teardown before we exit.
+	// This guarantees iptables rules are always cleaned up.
+	log.Println("waiting for NFLOGCollector teardown...")
+	wg.Wait()
+	log.Println("shutdown complete")
 }

@@ -3,9 +3,17 @@ module github.com/Kes0x6f/Log-Based--IDS
 go 1.25.6
 
 require (
+	github.com/florianl/go-nflog/v2 v2.3.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-sqlite3 v1.14.37
+	golang.org/x/sys v0.43.0
 )
 
-require golang.org/x/sys v0.13.0 // indirect
+require (
+	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/mdlayher/netlink v1.9.1-0.20260312172110-2a932c0fc1ae // indirect
+	github.com/mdlayher/socket v0.5.1 // indirect
+	golang.org/x/net v0.50.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
+)

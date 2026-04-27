@@ -62,6 +62,18 @@ func ParserWorker(input <-chan collector.RawLog, output chan<- *model.Normalized
 			continue
 		}
 
+		// ── Fast path: Apache / Nginx access log lines ───────────────────────
+		// Combined Log Format starts with an IP address, not a syslog timestamp.
+		// Source tags "apache2" and "nginx" both arrive here.
+		if log.Source == "apache2" || log.Source == "nginx" {
+			event := parsers.ParseWebLogLine(line, log.Source)
+			if event != nil && event.EventType != "" {
+				fmt.Println(event)
+				output <- event
+			}
+			continue
+		}
+
 		var matches []string
 		var timestampStr string
 

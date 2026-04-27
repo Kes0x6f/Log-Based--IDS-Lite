@@ -51,7 +51,6 @@ func KernParser(event *model.NormalizedEvent) *model.NormalizedEvent {
 		if event.LogSource == "kern" {
 			return event // kern.log duplicate — drop it
 		}
-		return UFWParser(event)
 	}
 
 	// ── 2. Strip the optional kernel timestamp "[12345.678] " prefix ────────
