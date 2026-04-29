@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>IDS — Rules Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090f;--surface:#0c1220;--surface-2:#101928;--surface-3:#15213a;
+  --border:rgba(96,130,200,0.1);--border-2:rgba(96,130,200,0.2);
+  --text:#dde4f0;--text-2:#7a8cad;--text-3:#3d5070;
+  --accent:#38bdf8;--accent-dim:rgba(56,189,248,0.1);
+  --red:#f87171;--red-dim:rgba(248,113,113,0.1);
+  --orange:#fb923c;--orange-dim:rgba(251,146,60,0.1);
+  --amber:#fbbf24;--amber-dim:rgba(251,191,36,0.1);
+  --green:#34d399;--green-dim:rgba(52,211,153,0.1);
+  --blue:#60a5fa;--blue-dim:rgba(96,165,250,0.1);
+  --purple:#a78bfa;--purple-dim:rgba(167,139,250,0.1);
+  --pink:#f472b6;--pink-dim:rgba(244,114,182,0.1);
+  --sidebar-w:224px;--font-ui:'IBM Plex Sans',sans-serif;--font-mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%}
+body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size:13px;line-height:1.5;display:flex}
+.sidebar{width:var(--sidebar-w);min-height:100vh;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;position:fixed;top:0;left:0;bottom:0;z-index:10;overflow-y:auto;scrollbar-width:none}
+.sidebar::-webkit-scrollbar{display:none}
+.sidebar-brand{padding:16px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);flex-shrink:0}
+.brand-icon{width:30px;height:30px;background:var(--accent-dim);border:1px solid rgba(56,189,248,0.25);border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.brand-icon svg{width:15px;height:15px}
+.brand-name{font-size:13px;font-weight:500;color:var(--text)}
+.brand-ver{font-size:10px;color:var(--text-3);font-family:var(--font-mono);margin-top:1px}
+.nav-section{padding:10px 0 4px}
+.nav-label{font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);padding:4px 14px 5px;font-weight:500}
+.nav-item{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;color:var(--text-2);text-decoration:none;cursor:pointer;transition:color .12s,background .12s;position:relative;white-space:nowrap}
+.nav-item:hover{color:var(--text);background:rgba(96,130,200,0.05)}
+.nav-item.active{color:var(--accent);background:var(--accent-dim)}
+.nav-item.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent);border-radius:0 2px 2px 0}
+.nav-item svg{width:13px;height:13px;flex-shrink:0}
+.nav-badge{margin-left:auto;font-size:9px;font-family:var(--font-mono);background:var(--red-dim);color:var(--red);padding:1px 6px;border-radius:8px;flex-shrink:0}
+.nav-chip{margin-left:auto;font-size:9px;font-family:var(--font-mono);color:var(--text-3);padding:1px 5px;border:1px solid var(--border);border-radius:4px}
+.sidebar-footer{margin-top:auto;padding:11px 14px;border-top:1px solid var(--border);flex-shrink:0}
+.footer-status{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.footer-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);animation:blink 2.4s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.footer-txt{font-size:11px;color:var(--text-2);font-family:var(--font-mono)}
+.footer-time{font-size:10px;color:var(--text-3);font-family:var(--font-mono)}
+.main{margin-left:var(--sidebar-w);flex:1;min-height:100vh;display:flex;flex-direction:column}
+.topbar{height:50px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;position:sticky;top:0;z-index:5}
+.topbar-crumb{font-size:13px;font-weight:500;color:var(--text)}
+.topbar-sep{color:var(--text-3)}
+.topbar-page{font-size:12px;color:var(--text-3);font-family:var(--font-mono)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.topbar-clock{font-size:11px;color:var(--text-3);font-family:var(--font-mono)}
+.page{padding:18px 20px 36px;flex:1}
+
+/* Summary cards */
+.scards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-bottom:14px}
+.sc{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;position:relative;overflow:hidden}
+.sc::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--c,var(--border-2))}
+.sc-lbl{font-size:10px;color:var(--text-3);margin-bottom:5px;font-weight:500;letter-spacing:.04em}
+.sc-val{font-size:22px;font-weight:500;font-family:var(--font-mono);line-height:1;color:var(--text)}
+.sc-sub{font-size:10px;color:var(--text-3);margin-top:4px;font-family:var(--font-mono)}
+
+/* Filter bar */
+.filter-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.f-input{background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:6px 10px;outline:none;transition:border-color .2s;min-width:200px;flex:1;max-width:300px}
+.f-input:focus{border-color:var(--accent)}
+.f-input::placeholder{color:var(--text-3)}
+.f-select{background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--text-2);font-family:var(--font-mono);font-size:11px;padding:6px 8px;outline:none;cursor:pointer}
+.f-select:focus{border-color:var(--accent)}
+.f-btn{background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text-2);font-family:var(--font-mono);font-size:11px;padding:6px 11px;cursor:pointer;transition:color .12s,border-color .12s;white-space:nowrap}
+.f-btn:hover{color:var(--text);border-color:var(--border-2)}
+.stats-txt{font-size:11px;color:var(--text-3);font-family:var(--font-mono);margin-bottom:8px}
+.stats-txt strong{color:var(--text-2)}
+
+/* Rules grid */
+.rules-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:8px}
+
+/* Rule card */
+.rcard{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;transition:border-color .15s;display:flex;flex-direction:column;gap:10px}
+.rcard:hover{border-color:var(--border-2)}
+.rcard-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.rcard-name{font-size:12px;font-weight:500;color:var(--text);line-height:1.35;flex:1}
+.rcard-sev{flex-shrink:0}
+.rcard-desc{font-size:11px;color:var(--text-3);line-height:1.55}
+.rcard-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:3px;font-weight:500;letter-spacing:.04em;white-space:nowrap}
+.tag-src{background:var(--blue-dim);color:var(--blue)}
+.tag-cat{background:var(--purple-dim);color:var(--purple)}
+.tag-prog{background:var(--surface-3);color:var(--text-3)}
+.rcard-stats{display:flex;align-items:center;gap:12px;padding-top:8px;border-top:1px solid var(--border)}
+.rstat{display:flex;flex-direction:column;gap:2px}
+.rstat-lbl{font-size:9px;color:var(--text-3);letter-spacing:.05em;text-transform:uppercase}
+.rstat-val{font-size:13px;font-weight:500;font-family:var(--font-mono);color:var(--text)}
+.rstat-val.zero{color:var(--text-3)}
+.rstat-time{font-size:10px;font-family:var(--font-mono);color:var(--text-3)}
+.fire-bar-wrap{flex:1;margin-left:4px}
+.fire-bar-bg{height:3px;background:var(--surface-3);border-radius:2px;overflow:hidden;margin-top:8px}
+.fire-bar-fill{height:100%;border-radius:2px;background:var(--accent);transition:width .4s ease}
+
+/* Pills */
+.pill{display:inline-block;font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:3px;font-weight:500;letter-spacing:.05em}
+.pill-critical{background:var(--red-dim);color:var(--red)}
+.pill-high{background:var(--orange-dim);color:var(--orange)}
+.pill-medium{background:var(--amber-dim);color:var(--amber)}
+.pill-low{background:var(--green-dim);color:var(--green)}
+
+.empty-state{text-align:center;padding:48px;color:var(--text-3);font-family:var(--font-mono);font-size:12px}
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:2px}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"><path d="M12 2L3 7v5c0 5 4 9.3 9 10.5C17 21.3 21 17 21 12V7z"/></svg></div>
+    <div><div class="brand-name">Log-IDS</div><div class="brand-ver">v0.1.0 · :8888</div></div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Overview</div>
+    <a href="/" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </a>
+    <a href="/alerts.html" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Alerts
+      <span class="nav-badge" id="nav-crit">—</span>
+    </a>
+    <a href="/live" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 010 8.49M7.76 16.24a6 6 0 010-8.49M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>
+      Live Logs
+    </a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Investigation</div>
+    <a href="/ip-profile.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>IP Profile</a>
+    <a href="/alert-detail.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Alert Detail</a>
+    <a href="/brute-force.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Brute Force</a>
+    <a href="/timeline.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>Attack Timeline</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">System</div>
+    <a href="/rules.html" class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Rules Manager</a>
+    <a href="/sources.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 22V4a2 2 0 012-2h12a2 2 0 012 2v18"/><path d="M2 22h20"/><rect x="8" y="6" width="8" height="4"/></svg>Log Sources</a>
+    <a href="/reports.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Reports</a>
+    <a href="/settings.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>Settings</a>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="footer-status">
+      <div class="footer-dot"></div>
+      <span class="footer-txt">system online</span>
+    </div>
+    <div class="footer-time" id="footer-time">--:--:-- UTC</div>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-crumb">Log-IDS</span><span class="topbar-sep"> / </span><span class="topbar-page">rules-manager</span>
+    <div class="topbar-right"><span class="topbar-clock" id="topbar-clock">--:--:--</span></div>
+  </div>
+  <div class="page">
+
+    <!-- Summary cards -->
+    <div class="scards">
+      <div class="sc" style="--c:var(--accent)">
+        <div class="sc-lbl">Total Rules</div>
+        <div class="sc-val" id="sc-total">40</div>
+        <div class="sc-sub">registered</div>
+      </div>
+      <div class="sc" style="--c:var(--green)">
+        <div class="sc-lbl">Triggered Today</div>
+        <div class="sc-val" id="sc-triggered">—</div>
+        <div class="sc-sub">distinct rules</div>
+      </div>
+      <div class="sc" style="--c:var(--red)">
+        <div class="sc-lbl">Critical Rules</div>
+        <div class="sc-val" id="sc-crit">8</div>
+        <div class="sc-sub">max severity</div>
+      </div>
+      <div class="sc" style="--c:var(--amber)">
+        <div class="sc-lbl">High Rules</div>
+        <div class="sc-val" id="sc-high">18</div>
+        <div class="sc-sub">max severity</div>
+      </div>
+      <div class="sc" style="--c:var(--purple)">
+        <div class="sc-lbl">Alert Categories</div>
+        <div class="sc-val" id="sc-cats">—</div>
+        <div class="sc-sub">distinct</div>
+      </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+      <input class="f-input" id="f-text" type="text" placeholder="search rule name or description…" oninput="render()">
+      <select class="f-select" id="f-src" onchange="render()">
+        <option value="">All sources</option>
+        <option value="auth">auth</option>
+        <option value="ufw">ufw</option>
+        <option value="kern">kern</option>
+        <option value="audit">audit</option>
+        <option value="web">web</option>
+      </select>
+      <select class="f-select" id="f-sev" onchange="render()">
+        <option value="">All severities</option>
+        <option value="CRITICAL">Critical</option>
+        <option value="HIGH">High</option>
+        <option value="MEDIUM">Medium</option>
+        <option value="LOW">Low</option>
+      </select>
+      <select class="f-select" id="f-sort" onchange="render()">
+        <option value="fires">Sort: most fired</option>
+        <option value="name">Sort: name A–Z</option>
+        <option value="sev">Sort: severity</option>
+        <option value="last">Sort: last fired</option>
+      </select>
+      <button class="f-btn" onclick="clearFilters()">✕ clear</button>
+    </div>
+    <div class="stats-txt" id="stats-txt">loading…</div>
+
+    <div class="rules-grid" id="rules-grid"><div class="empty-state">loading rule data…</div></div>
+
+  </div>
+</div>
+
+<script>
+// ── All 40 rules from main.go ──────────────────────────────────────
+const RULES = [
+  // SSH
+  {name:"SSH Brute Force",           src:"auth", prog:"sshd",   cat:"authentication",  sev:"HIGH",     desc:"Multiple failed SSH login attempts from a single IP within a sliding window."},
+  {name:"SSH Username Enumeration",  src:"auth", prog:"sshd",   cat:"authentication",  sev:"HIGH",     desc:"Single IP attempting many distinct usernames — automated user discovery."},
+  {name:"SSH Suspicious Login",      src:"auth", prog:"sshd",   cat:"authentication",  sev:"CRITICAL", desc:"Successful SSH login preceded by 3+ failures in a 5-minute window — likely brute-force success."},
+  {name:"Invalid User Brute Force",  src:"auth", prog:"sshd",   cat:"authentication",  sev:"MEDIUM",   desc:"Repeated SSH attempts for usernames that do not exist on the system."},
+  {name:"SSH Rapid Reconnect",       src:"auth", prog:"sshd",   cat:"authentication",  sev:"HIGH",     desc:"Frequent disconnect-reconnect cycles from the same IP — automated tool signature."},
+  {name:"SSH Root Targeting",        src:"auth", prog:"sshd",   cat:"authentication",  sev:"HIGH",     desc:"Repeated failed SSH attempts specifically targeting the root account."},
+  {name:"Distributed Brute Force",   src:"auth", prog:"sshd",   cat:"authentication",  sev:"HIGH",     desc:"Three or more distinct IPs all failing against the same username — coordinated attack."},
+  // SUDO
+  {name:"SUDO Brute Force",          src:"auth", prog:"sudo",   cat:"privilege",       sev:"HIGH",     desc:"Multiple failed sudo password attempts by the same user in a short window."},
+  {name:"SUDO Success After Failure",src:"auth", prog:"sudo",   cat:"privilege",       sev:"HIGH",     desc:"sudo succeeds immediately following repeated failures — possible password guessing success."},
+  {name:"SUDO Sensitive Command",    src:"auth", prog:"sudo",   cat:"privilege",       sev:"varies",   desc:"Risk-scored detection: rm -rf, mkfs, dd, chmod 777, useradd, passwd — score adjusted by prior failures and frequency."},
+  {name:"SUDO Command Abuse",        src:"auth", prog:"sudo",   cat:"privilege",       sev:"HIGH",     desc:"User executes 5+ sudo commands within 2 minutes — abnormal elevated-privilege usage rate."},
+  {name:"SUDO Root Abuse",           src:"auth", prog:"sudo",   cat:"privilege",       sev:"HIGH",     desc:"User escalates to root via sudo 5+ times within 2 minutes."},
+  {name:"SUDO Session Abuse",        src:"auth", prog:"sudo",   cat:"privilege",       sev:"MEDIUM",   desc:"User opens 4+ sudo sessions within 2 minutes — session thrashing pattern."},
+  // SU
+  {name:"SU Brute Force",            src:"auth", prog:"su",     cat:"privilege",       sev:"HIGH",     desc:"Multiple failed su attempts by the same user — password guessing against su."},
+  {name:"SU Success After Failure",  src:"auth", prog:"su",     cat:"privilege",       sev:"CRITICAL", desc:"su succeeds after 3+ failures within 5 minutes — brute-force success against local account."},
+  // Account
+  {name:"New Account Created",       src:"auth", prog:"useradd",cat:"account",         sev:"HIGH",     desc:"New local user account added — common persistence technique after initial access."},
+  {name:"Group Membership Changed",  src:"auth", prog:"usermod",cat:"account",         sev:"varies",   desc:"User added to a group; CRITICAL when group is sudo, wheel, root, admin, docker, shadow, or adm."},
+  {name:"Password Changed",          src:"auth", prog:"passwd", cat:"account",         sev:"varies",   desc:"Password changed for any account; CRITICAL when account is root, daemon, or nobody."},
+  // UFW
+  {name:"UFW Port Scan Detected",    src:"ufw",  prog:"kernel", cat:"reconnaissance",  sev:"HIGH",     desc:"Single source IP hits 10+ distinct destination ports within 1 minute — automated scan."},
+  {name:"UFW Repeated Block",        src:"ufw",  prog:"kernel", cat:"reconnaissance",  sev:"MEDIUM",   desc:"Same source IP accumulates 20+ firewall blocks in 2 minutes — persistent probing."},
+  {name:"UFW Block Storm",           src:"ufw",  prog:"kernel", cat:"dos",             sev:"CRITICAL", desc:"200+ total firewall blocks within 1 minute across all IPs — DDoS or botnet sweep."},
+  {name:"UFW Sensitive Port Probe",  src:"ufw",  prog:"kernel", cat:"reconnaissance",  sev:"varies",   desc:"Inbound probe on SSH, Telnet, RDP, databases, Docker, Kubernetes, or etcd. Severity varies by service."},
+  {name:"UFW Suspicious Outbound",   src:"ufw",  prog:"kernel", cat:"c2",              sev:"CRITICAL", desc:"Outbound connection blocked to known C2/backdoor ports: Metasploit, IRC, Tor, mining pools."},
+  // Kernel
+  {name:"Kernel Module Load",        src:"kern", prog:"kernel", cat:"rootkit",         sev:"CRITICAL", desc:"Out-of-tree or unsigned kernel module loaded — primary rootkit delivery mechanism."},
+  {name:"Sensitive Binary Segfault", src:"kern", prog:"kernel", cat:"exploitation",    sev:"HIGH",     desc:"sshd, sudo, su, passwd, polkitd, or systemd crashes — may indicate exploitation attempt."},
+  {name:"OOM Kill Detected",         src:"kern", prog:"kernel", cat:"stability",       sev:"varies",   desc:"OOM killer terminates a process. HIGH for critical services (sshd, nginx, postgres…), MEDIUM otherwise."},
+  {name:"Disk I/O Errors Detected",  src:"kern", prog:"kernel", cat:"hardware",        sev:"varies",   desc:"Block device accumulates repeated I/O errors — hardware failure or deliberate filesystem corruption."},
+  // Audit
+  {name:"Sensitive File Read",       src:"audit",prog:"auditd", cat:"credential-access",sev:"HIGH",    desc:"Process reads /etc/shadow, /etc/gshadow, /etc/sudoers, or ~/.ssh/authorized_keys."},
+  {name:"Sensitive File Modified",   src:"audit",prog:"auditd", cat:"tampering",       sev:"CRITICAL", desc:"Write to /etc/passwd, /etc/shadow, /etc/sudoers, /root/.ssh, or /etc/hosts."},
+  {name:"Cron Job Created/Modified", src:"audit",prog:"auditd", cat:"persistence",     sev:"HIGH",     desc:"File written to any cron directory or /etc/crontab — classic persistence mechanism."},
+  {name:"Systemd Service Modified",  src:"audit",prog:"auditd", cat:"persistence",     sev:"CRITICAL", desc:"Systemd unit file written to system directories — boot-persistent execution backdoor."},
+  {name:"Setuid Bit Set on Binary",  src:"audit",prog:"auditd", cat:"privilege-escalation",sev:"CRITICAL",desc:"chmod sets setuid bit on a binary — creates a root-access backdoor executable."},
+  {name:"Ptrace Syscall Detected",   src:"audit",prog:"auditd", cat:"exploitation",    sev:"CRITICAL", desc:"Process calls ptrace — memory injection, credential dumping, or function hooking technique."},
+  {name:"Capability Change Detected",src:"audit",prog:"auditd", cat:"privilege-escalation",sev:"HIGH", desc:"Process dynamically modifies its Linux capability set — privilege escalation without a shell."},
+  {name:"Execution from Temp Dir",   src:"audit",prog:"auditd", cat:"execution",       sev:"varies",   desc:"Binary executed from /tmp, /dev/shm, or /var/tmp. CRITICAL if file was written then executed (dropper)."},
+  // Web
+  {name:"Web Scanner Detected",      src:"web",  prog:"httpd",  cat:"reconnaissance",  sev:"HIGH",     desc:"Request user-agent matches Nikto, sqlmap, Masscan, Gobuster, Nuclei, Burp Suite, and 20+ others."},
+  {name:"Web Path Probe",            src:"web",  prog:"httpd",  cat:"web-attack",      sev:"varies",   desc:"URI contains attack patterns: RCE/command injection (CRITICAL), SQL injection (CRITICAL), XSS (HIGH), directory traversal (HIGH)."},
+  {name:"Web Path Enumeration",      src:"web",  prog:"httpd",  cat:"reconnaissance",  sev:"MEDIUM",   desc:"Single IP generates 15+ HTTP 404 responses in 1 minute — automated path discovery scan."},
+  {name:"Web Login Brute Force",     src:"web",  prog:"httpd",  cat:"credential-access",sev:"HIGH",    desc:"10+ HTTP 401/403 responses to the same IP in 2 minutes — credential stuffing or login brute force."},
+  {name:"Unusual HTTP Method",       src:"web",  prog:"httpd",  cat:"web-probe",       sev:"varies",   desc:"TRACE (XST attack), CONNECT (proxy tunnel), OPTIONS (recon), PUT/DELETE/PATCH (file manipulation)."},
+  {name:"High Request Rate",         src:"web",  prog:"httpd",  cat:"dos",             sev:"varies",   desc:"100+ requests/min from one IP (MEDIUM flood) or 500+ (HIGH — likely DDoS or heavy automated scan)."},
+];
+
+const SEV_ORD = {CRITICAL:4,HIGH:3,MEDIUM:2,LOW:1,varies:0};
+
+// ── Live data from /alerts ──────────────────────────────────────────
+let fireCounts = {}, lastFired = {}, alertData = [];
+
+async function loadAlerts() {
+  try {
+    const r = await fetch('/alerts?limit=2000');
+    alertData = r.ok ? (await r.json() ?? []) : [];
+  } catch { alertData = []; }
+
+  fireCounts = {}; lastFired = {};
+  alertData.forEach(a => {
+    const n = a.RuleName;
+    if (!n) return;
+    fireCounts[n] = (fireCounts[n] || 0) + 1;
+    const t = new Date(a.Timestamp);
+    if (!lastFired[n] || t > lastFired[n]) lastFired[n] = t;
+  });
+
+  // Summary cards
+  const triggered = RULES.filter(r => fireCounts[r.name] > 0).length;
+  const cats = new Set(alertData.map(a => a.Category).filter(Boolean)).size;
+  el('sc-triggered').textContent = triggered;
+  el('sc-cats').textContent = cats || '—';
+
+  const nb = el('nav-crit');
+  if (nb) nb.textContent = alertData.filter(a=>a.Severity==='CRITICAL').length || '—';
+
+  render();
+}
+
+const el = id => document.getElementById(id);
+const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const pill = sev => {
+  if (sev === 'varies') return `<span class="pill" style="background:var(--surface-3);color:var(--text-3)">varies</span>`;
+  return `<span class="pill pill-${sev.toLowerCase()}">${esc(sev)}</span>`;
+};
+
+function fmtLast(d) {
+  if (!d) return 'never';
+  const diff = Date.now() - d;
+  if (diff < 60000)  return Math.floor(diff/1000) + 's ago';
+  if (diff < 3600000) return Math.floor(diff/60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff/3600000) + 'h ago';
+  return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+}
+
+function clearFilters() {
+  el('f-text').value = '';
+  el('f-src').value = '';
+  el('f-sev').value = '';
+  render();
+}
+
+function render() {
+  const q    = el('f-text').value.toLowerCase();
+  const fsrc = el('f-src').value;
+  const fsev = el('f-sev').value;
+  const fsort= el('f-sort').value;
+
+  let rules = RULES.filter(r => {
+    if (fsrc && r.src !== fsrc) return false;
+    if (fsev && r.sev !== fsev) return false;
+    if (q && !(r.name.toLowerCase().includes(q) || r.desc.toLowerCase().includes(q) || r.cat.toLowerCase().includes(q))) return false;
+    return true;
+  });
+
+  // Sort
+  const maxFires = Math.max(1, ...Object.values(fireCounts));
+  if (fsort === 'fires') rules.sort((a,b) => (fireCounts[b.name]||0) - (fireCounts[a.name]||0));
+  else if (fsort === 'name') rules.sort((a,b) => a.name.localeCompare(b.name));
+  else if (fsort === 'sev')  rules.sort((a,b) => (SEV_ORD[b.sev]||0) - (SEV_ORD[a.sev]||0));
+  else if (fsort === 'last') rules.sort((a,b) => {
+    const la = lastFired[a.name]?.getTime() || 0;
+    const lb = lastFired[b.name]?.getTime() || 0;
+    return lb - la;
+  });
+
+  el('stats-txt').innerHTML = `Showing <strong>${rules.length}</strong> of <strong>${RULES.length}</strong> rules`;
+
+  const grid = el('rules-grid');
+  if (!rules.length) { grid.innerHTML = '<div class="empty-state">no rules match the filter</div>'; return; }
+
+  const srcColors = {auth:'var(--blue)',ufw:'var(--green)',kern:'var(--amber)',audit:'var(--orange)',web:'var(--pink)'};
+
+  grid.innerHTML = rules.map(r => {
+    const fires = fireCounts[r.name] || 0;
+    const last  = lastFired[r.name];
+    const barW  = Math.round(fires / maxFires * 100);
+    const barColor = fires > 0 ? (srcColors[r.src] || 'var(--accent)') : 'var(--surface-3)';
+
+    return `<div class="rcard">
+      <div class="rcard-top">
+        <div class="rcard-name">${esc(r.name)}</div>
+        <div class="rcard-sev">${pill(r.sev)}</div>
+      </div>
+      <div class="rcard-desc">${esc(r.desc)}</div>
+      <div class="rcard-meta">
+        <span class="tag tag-src">${esc(r.src)}</span>
+        <span class="tag tag-prog">${esc(r.prog)}</span>
+        <span class="tag tag-cat">${esc(r.cat)}</span>
+      </div>
+      <div class="rcard-stats">
+        <div class="rstat">
+          <div class="rstat-lbl">Fires</div>
+          <div class="rstat-val ${fires===0?'zero':''}">${fires.toLocaleString()}</div>
+        </div>
+        <div class="rstat">
+          <div class="rstat-lbl">Last fired</div>
+          <div class="rstat-time">${fmtLast(last)}</div>
+        </div>
+        <div class="fire-bar-wrap">
+          <div class="fire-bar-bg"><div class="fire-bar-fill" style="width:${barW}%;background:${barColor}"></div></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Clock ──────────────────────────────────────────────────────────
+const tick = () => {
+  const s = new Date().toUTCString().slice(17,25)+' UTC';
+  el('topbar-clock').textContent = s;
+  el('footer-time').textContent  = s;
+};
+setInterval(tick,1000); tick();
+
+loadAlerts();
+setInterval(loadAlerts, 30000);
+</script>
+</body>
+</html>

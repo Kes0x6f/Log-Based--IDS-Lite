@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
@@ -11,32 +12,20 @@ import (
 
 // ── Compiled regexes ────────────────────────────────────────────────────────
 
-// msg=audit(1609459200.123:456): — captures the unix seconds
-var auditMsgRe = regexp.MustCompile(`msg=audit\((\d+)\.\d+:\d+\)`)
+// msg=audit(1609459200.123:456) — group 1 = unix seconds, group 2 = serial
+var auditMsgRe = regexp.MustCompile(`msg=audit\((\d+)\.\d+:(\d+)\)`)
 
-// key="exec_tmp"  or  key=exec_tmp
 var auditKeyRe = regexp.MustCompile(`\bkey="?([^"\s]+)"?`)
-
-// exe="/bin/bash"
 var auditExeRe = regexp.MustCompile(`\bexe="([^"]+)"`)
-
-// name="/etc/shadow"  or  name=/etc/shadow
 var auditNameRe = regexp.MustCompile(`\bname="?([^"\s]+)"?`)
-
-// comm="bash"
-// Note: comm= is truncated to 15 characters by the kernel; use exe= when available.
 var auditCommRe = regexp.MustCompile(`\bcomm="?([^"\s]+)"?`)
-
-// auid=1000
 var auditAuidRe = regexp.MustCompile(`\bauid=(\d+)`)
-
-// uid=0
 var auditUidRe = regexp.MustCompile(`\buid=(\d+)`)
-
-// mode=0104755
 var auditModeRe = regexp.MustCompile(`\bmode=(\d+)`)
+var auditCapPrmRe = regexp.MustCompile(`\bcap_prm=([0-9a-f]+)`)
+var auditCapEffRe = regexp.MustCompile(`\bcap_eff=([0-9a-f]+)`)
 
-// ── key → EventType table ───────────────────────────────────────────────────
+// ── key → EventType ─────────────────────────────────────────────────────────
 
 var auditKeyToEventType = map[string]string{
 	"read_sensitive":  "FILE_READ",
@@ -50,152 +39,242 @@ var auditKeyToEventType = map[string]string{
 	"tmp_write":       "TMP_WRITE",
 }
 
-// tmpDirPrefixes are the world-writable directories EXEC_TMP tracks.
-// Keeping this in the parser avoids duplicating the list in the rule.
 var tmpDirPrefixes = []string{"/tmp/", "/dev/shm/", "/run/shm/", "/var/tmp/"}
 
-// ── Public entry points ────────────────────────────────────────────────────
-
-// ParseRawAuditLine creates a NormalizedEvent from a raw audit.log line that
-// has no syslog header prefix.  Called by ParserWorker when Source="audit"
-// and the line starts with "type=".
+// ── Multi-record correlation ─────────────────────────────────────────────────
 //
-//	Line: "type=SYSCALL msg=audit(1609459200.123:456): ... key=\"exec_tmp\""
-func ParseRawAuditLine(line, source string) *model.NormalizedEvent {
-	ts := auditTimestamp(line)
+// Every audit event spans several lines sharing the same serial number:
+//
+//   type=SYSCALL msg=audit(T:99): exe="/usr/bin/cat" key="read_sensitive"
+//   type=CWD     msg=audit(T:99): cwd="/root"
+//   type=PATH    msg=audit(T:99): name="/etc/shadow"
+//   type=EOE     msg=audit(T:99):
+//
+// SYSCALL has key= and exe=; PATH has name=. Neither alone is complete.
+//
+// CAPSET is different — cap values live on their own record type:
+//
+//   type=SYSCALL msg=audit(T:42): exe="/usr/bin/evil" key="capset"
+//   type=CAPSET  msg=audit(T:42): cap_prm=00000000ffffffff cap_eff=...
+//   type=EOE     msg=audit(T:42):
+//
+// Fix: buffer the SYSCALL partial; complete it when PATH or type=CAPSET arrives.
 
-	event := &model.NormalizedEvent{
-		Timestamp:  ts,
-		LogSource:  source,
-		Program:    "auditd",
-		Message:    line,
-		RawLine:    line,
-		EventCount: 1,
-	}
-
-	return parseAuditRecord(line, event)
+type partialAuditEvent struct {
+	created   time.Time
+	timestamp time.Time
+	username  string
+	eventType string
+	exe       string
 }
 
-// ── Internal parser ────────────────────────────────────────────────────────
+var (
+	auditBufMu sync.Mutex
+	auditBuf   = make(map[string]*partialAuditEvent)
+)
 
-// parseAuditRecord classifies a single audit record line and populates the
-// relevant NormalizedEvent fields.  Only records whose key= is in
-// auditKeyToEventType produce an EventType; all others are left unset so the
-// rule registry ignores them.
-//
-// Record type responsibilities:
-//
-//	PATH   → file-path events (FILE_READ, FILE_WRITE, CRON_WRITE, SERVICE_WRITE,
-//	          TMP_WRITE, SETUID) and EXEC_TMP (script path, not interpreter).
-//	SYSCALL → process-identity events (PTRACE, CAPSET).
-//
-// EXEC_TMP is intentionally sourced from PATH records, not SYSCALL records.
-// The SYSCALL exe= field contains the interpreter (e.g. /bin/bash), which is
-// useless for write→exec correlation.  The PATH record carries the actual
-// script path (/tmp/malware.sh), which is what was written and must be matched
-// against the TMP_WRITE map in AuditExecTmpRule.
-func parseAuditRecord(line string, event *model.NormalizedEvent) *model.NormalizedEvent {
+const bufferTTL = 10 * time.Second
+
+// ── Public entry point ─────────────────────────────────────────────────────
+
+func ParseRawAuditLine(line, source string) *model.NormalizedEvent {
 	recType := auditRecordType(line)
-	key := auditField(auditKeyRe, line)
-	eventType, known := auditKeyToEventType[key]
-	if !known {
-		return event // unrecognised key — rule registry will skip
-	}
+	serial := auditSerial(line)
+	ts := auditTimestamp(line)
 
-	// cap_prm=0000000000000000  (permitted capability set, hex)
-	var auditCapPrmRe = regexp.MustCompile(`\bcap_prm=([0-9a-f]+)`)
-
-	// cap_eff=0000000000000000  (effective capability set, hex)
-	var auditCapEffRe = regexp.MustCompile(`\bcap_eff=([0-9a-f]+)`)
-
-	// FIX: Resolve username unconditionally before the record-type switch.
-	// Previously this was only called inside the SYSCALL branch, which meant
-	// all PATH-based events (FILE_READ, FILE_WRITE, CRON_WRITE, SERVICE_WRITE,
-	// TMP_WRITE, SETUID, EXEC_TMP) always had an empty Username in their alerts.
-	// Both PATH and SYSCALL records carry auid= / uid= fields.
-	event.Username = auditUser(line)
+	pruneAuditBuffer()
 
 	switch recType {
 
-	// ── PATH records carry the file name ───────────────────────────────────
-	case "PATH":
-		name := auditField(auditNameRe, line)
-		if name == "" {
-			return event
-		}
-
-		switch eventType {
-		// File-path events are only emitted from PATH records.
-		case "FILE_READ", "FILE_WRITE", "CRON_WRITE", "SERVICE_WRITE", "TMP_WRITE":
-			event.EventType = eventType
-			event.Command = name
-
-		// SETUID: only alert when the new mode actually has the setuid bit.
-		case "SETUID":
-			if auditHasSetuid(line) {
-				event.EventType = "SETUID"
-				event.Command = name
-			}
-
-		// FIX: EXEC_TMP is sourced from PATH records, not SYSCALL records.
-		//
-		// When auditd processes execve, it emits multiple records sharing the
-		// same serial number:
-		//   type=SYSCALL ... exe="/bin/bash" key="exec_tmp"   ← interpreter
-		//   type=PATH    ... name="/tmp/x.sh" item=1 key="exec_tmp" ← script ← we want this
-		//
-		// We only keep PATH records that point inside a temp dir (item=1 style),
-		// filtering out item=0 records that carry the interpreter's own path.
-		case "EXEC_TMP":
-			for _, prefix := range tmpDirPrefixes {
-				if strings.HasPrefix(name, prefix) {
-					event.EventType = "EXEC_TMP"
-					event.Command = name // script path — matches TMP_WRITE correlation key
-					break
-				}
-			}
-		}
-
-	// ── SYSCALL records carry the calling binary ───────────────────────────
+	// ── SYSCALL: identify intent; buffer for PATH or CAPSET record ───────────
 	case "SYSCALL":
+		key := auditField(auditKeyRe, line)
+		eventType, known := auditKeyToEventType[key]
+		if !known || serial == "" {
+			return nil
+		}
+
 		exe := auditField(auditExeRe, line)
 		if exe == "" {
-			// comm= is a 15-char kernel-truncated fallback; use only when exe= absent
 			exe = auditField(auditCommRe, line)
 		}
 
-		switch eventType {
-		// FIX: EXEC_TMP removed from this case.
-		// The SYSCALL exe= value is the interpreter (/bin/bash, /bin/sh), not the
-		// script path.  Emitting EXEC_TMP here would put the interpreter path into
-		// event.Command, which would never match any TMP_WRITE entry keyed by the
-		// script path.  The PATH record handler above emits the correct event.
-		case "PTRACE", "CAPSET":
-			event.EventType = eventType
-			event.Command = exe
+		// PTRACE: all data is on the SYSCALL record — emit immediately.
+		if eventType == "PTRACE" {
+			if exe == "" {
+				exe = "unknown"
+			}
+			return &model.NormalizedEvent{
+				Timestamp:  ts,
+				LogSource:  source,
+				Program:    "auditd",
+				EventType:  "PTRACE",
+				Username:   auditUser(line),
+				Command:    exe,
+				Message:    "exe=" + exe,
+				RawLine:    line,
+				EventCount: 1,
+			}
 		}
+
+		// Everything else: buffer and wait for the completing record.
+		auditBufMu.Lock()
+		auditBuf[serial] = &partialAuditEvent{
+			created:   time.Now(),
+			timestamp: ts,
+			username:  auditUser(line),
+			eventType: eventType,
+			exe:       exe,
+		}
+		auditBufMu.Unlock()
+		return nil
+
+	// ── type=CAPSET record: carries cap_prm/cap_eff for a capset syscall ────
+	//
+	// cap_prm and cap_eff are NOT on the SYSCALL record — only on this one.
+	// Look up the buffered SYSCALL to get exe= and username=, then emit.
 	case "CAPSET":
-		// Only process if the audit key is "capset"
-		if eventType != "CAPSET" {
-			return event
+		if serial == "" {
+			return nil
 		}
-		// Extract capability sets from the CAPSET record itself
+
+		auditBufMu.Lock()
+		partial, ok := auditBuf[serial]
+		if ok {
+			delete(auditBuf, serial)
+		}
+		auditBufMu.Unlock()
+
+		if !ok || partial.eventType != "CAPSET" {
+			return nil
+		}
+
+		exe := partial.exe
+		if exe == "" {
+			exe = "unknown"
+		}
+
 		capPrm := auditField(auditCapPrmRe, line)
 		capEff := auditField(auditCapEffRe, line)
 
-		// Store them in Message so the rule can read them
-		// Format: "cap_prm=<hex> cap_eff=<hex>"
-		event.EventType = "CAPSET"
-		event.Message = "cap_prm=" + capPrm + " cap_eff=" + capEff
+		// Message format matches parseCapFields() in audit_capset.go rule.
+		return &model.NormalizedEvent{
+			Timestamp:  partial.timestamp,
+			LogSource:  source,
+			Program:    "auditd",
+			EventType:  "CAPSET",
+			Username:   partial.username,
+			Command:    exe,
+			Message:    "cap_prm=" + capPrm + " cap_eff=" + capEff,
+			RawLine:    line,
+			EventCount: 1,
+		}
+
+	// ── PATH record: carries the file name for all file-path events ──────────
+	case "PATH":
+		if serial == "" {
+			return nil
+		}
+
+		auditBufMu.Lock()
+		partial, ok := auditBuf[serial]
+		auditBufMu.Unlock()
+
+		if !ok {
+			return nil
+		}
+
+		name := auditField(auditNameRe, line)
+		if name == "" {
+			return nil
+		}
+
+		switch partial.eventType {
+
+		case "FILE_READ", "FILE_WRITE", "CRON_WRITE", "SERVICE_WRITE", "TMP_WRITE":
+			auditBufMu.Lock()
+			delete(auditBuf, serial)
+			auditBufMu.Unlock()
+
+			// Pass exe via Message so rules can filter by calling binary.
+			// Format: "exe=<path>"  — parsed with strings.TrimPrefix in rule.
+			return &model.NormalizedEvent{
+				Timestamp:  partial.timestamp,
+				LogSource:  source,
+				Program:    "auditd",
+				EventType:  partial.eventType,
+				Username:   partial.username,
+				Command:    name,
+				Message:    "exe=" + partial.exe,
+				RawLine:    line,
+				EventCount: 1,
+			}
+
+		case "SETUID":
+			// Only fire if the PATH record shows the setuid bit is actually set.
+			if !auditHasSetuid(line) {
+				return nil
+			}
+			auditBufMu.Lock()
+			delete(auditBuf, serial)
+			auditBufMu.Unlock()
+
+			return &model.NormalizedEvent{
+				Timestamp:  partial.timestamp,
+				LogSource:  source,
+				Program:    "auditd",
+				EventType:  "SETUID",
+				Username:   partial.username,
+				Command:    name,
+				Message:    "exe=" + partial.exe,
+				RawLine:    line,
+				EventCount: 1,
+			}
+
+		case "EXEC_TMP":
+			// auditd emits two PATH records for execve:
+			//   item=0  the interpreter  (/bin/bash)  — skip
+			//   item=1  the script path  (/tmp/x.sh)  — emit
+			// Filter by whether name is inside a temp dir rather than parsing
+			// item= so we work correctly across different auditd versions.
+			for _, prefix := range tmpDirPrefixes {
+				if strings.HasPrefix(name, prefix) {
+					auditBufMu.Lock()
+					delete(auditBuf, serial)
+					auditBufMu.Unlock()
+
+					return &model.NormalizedEvent{
+						Timestamp:  partial.timestamp,
+						LogSource:  source,
+						Program:    "auditd",
+						EventType:  "EXEC_TMP",
+						Username:   partial.username,
+						Command:    name,
+						Message:    "exe=" + partial.exe,
+						RawLine:    line,
+						EventCount: 1,
+					}
+				}
+			}
+			// interpreter PATH record — leave buffer alive for the script record
+			return nil
+		}
+
+	// ── EOE / PROCTITLE: flush the buffer entry for this serial ─────────────
+	case "EOE", "PROCTITLE":
+		if serial != "" {
+			auditBufMu.Lock()
+			delete(auditBuf, serial)
+			auditBufMu.Unlock()
+		}
 	}
 
-	return event
+	return nil
 }
 
 // ── Field extractors ────────────────────────────────────────────────────────
 
 func auditRecordType(line string) string {
-	// "type=SYSCALL ..." — type is always the first token
 	fields := strings.Fields(line)
 	if len(fields) == 0 {
 		return ""
@@ -211,14 +290,23 @@ func auditField(re *regexp.Regexp, line string) string {
 	return ""
 }
 
-// auditHasSetuid returns true when the mode= field in a PATH record has the
-// setuid bit (octal 04000) set.
+// auditSerial extracts the serial from msg=audit(SEC.MSEC:SERIAL).
+// This is the correlation key linking SYSCALL → CWD → PATH → CAPSET records.
+func auditSerial(line string) string {
+	m := auditMsgRe.FindStringSubmatch(line)
+	if len(m) == 3 {
+		return m[2]
+	}
+	return ""
+}
+
+// auditHasSetuid returns true when the mode= field on a PATH record
+// has the setuid bit (octal 04000) set.
 func auditHasSetuid(line string) bool {
 	modeStr := auditField(auditModeRe, line)
 	if modeStr == "" {
 		return false
 	}
-	// mode values in audit log are octal strings like "0104755"
 	val, err := strconv.ParseInt(strings.TrimLeft(modeStr, "0"), 8, 64)
 	if err != nil {
 		return false
@@ -226,11 +314,10 @@ func auditHasSetuid(line string) bool {
 	return (val & 04000) != 0
 }
 
-// auditUser resolves the real user from auid= (preferred) or uid=.
-// Returns empty string when no usable uid is found.
+// auditUser resolves the acting user from auid= (login uid) or uid=.
+// 4294967295 == (uint32)(-1) == unset.
 func auditUser(line string) string {
 	auid := auditField(auditAuidRe, line)
-	// 4294967295 = (uint32)-1 = "unset"
 	if auid != "" && auid != "4294967295" {
 		return "uid:" + auid
 	}
@@ -241,15 +328,26 @@ func auditUser(line string) string {
 	return ""
 }
 
-// auditTimestamp extracts unix seconds from msg=audit(SEC.MSEC:SERIAL)
-// and returns a time.Time.  Falls back to time.Now() on parse failure.
+// auditTimestamp extracts unix seconds from msg=audit(SEC.MSEC:SERIAL).
 func auditTimestamp(line string) time.Time {
 	m := auditMsgRe.FindStringSubmatch(line)
-	if len(m) == 2 {
+	if len(m) >= 2 {
 		sec, err := strconv.ParseInt(m[1], 10, 64)
 		if err == nil {
 			return time.Unix(sec, 0)
 		}
 	}
 	return time.Now()
+}
+
+// pruneAuditBuffer drops partial events older than bufferTTL.
+func pruneAuditBuffer() {
+	cutoff := time.Now().Add(-bufferTTL)
+	auditBufMu.Lock()
+	for serial, p := range auditBuf {
+		if p.created.Before(cutoff) {
+			delete(auditBuf, serial)
+		}
+	}
+	auditBufMu.Unlock()
 }

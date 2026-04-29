@@ -32,7 +32,6 @@ var capsetWhitelist = map[string]bool{
 	"/snap/snapd/26865/usr/lib/snapd/snap-update-ns": true,
 	"/usr/bin/setpriv":                               true,
 	"/usr/libexec/gdm-session-worker":                true,
-	"/usr/lib/systemd/systemd-executor":              true,
 	"/usr/sbin/avahi-daemon":                         true,
 	"/usr/sbin/auditctl":                             true,
 

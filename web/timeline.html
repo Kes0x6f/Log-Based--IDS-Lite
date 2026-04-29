@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>IDS — Attack Timeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090f;--surface:#0c1220;--surface-2:#101928;--surface-3:#15213a;
+  --border:rgba(96,130,200,0.1);--border-2:rgba(96,130,200,0.2);
+  --text:#dde4f0;--text-2:#7a8cad;--text-3:#3d5070;
+  --accent:#38bdf8;--accent-dim:rgba(56,189,248,0.1);
+  --red:#f87171;--red-dim:rgba(248,113,113,0.1);
+  --orange:#fb923c;--orange-dim:rgba(251,146,60,0.1);
+  --amber:#fbbf24;--amber-dim:rgba(251,191,36,0.1);
+  --green:#34d399;--green-dim:rgba(52,211,153,0.1);
+  --sidebar-w:224px;--font-ui:'IBM Plex Sans',sans-serif;--font-mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%}
+body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size:13px;line-height:1.5;display:flex}
+.sidebar{width:var(--sidebar-w);min-height:100vh;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;position:fixed;top:0;left:0;bottom:0;z-index:10;overflow-y:auto;scrollbar-width:none}
+.sidebar::-webkit-scrollbar{display:none}
+.sidebar-brand{padding:16px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);flex-shrink:0}
+.brand-icon{width:30px;height:30px;background:var(--accent-dim);border:1px solid rgba(56,189,248,0.25);border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.brand-icon svg{width:15px;height:15px}
+.brand-name{font-size:13px;font-weight:500;color:var(--text)}
+.brand-ver{font-size:10px;color:var(--text-3);font-family:var(--font-mono);margin-top:1px}
+.nav-section{padding:10px 0 4px}
+.nav-label{font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);padding:4px 14px 5px;font-weight:500}
+.nav-item{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;color:var(--text-2);text-decoration:none;cursor:pointer;transition:color .12s,background .12s;position:relative;white-space:nowrap}
+.nav-item:hover{color:var(--text);background:rgba(96,130,200,0.05)}
+.nav-item.active{color:var(--accent);background:var(--accent-dim)}
+.nav-item.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent);border-radius:0 2px 2px 0}
+.nav-item svg{width:13px;height:13px;flex-shrink:0}
+.nav-badge{margin-left:auto;font-size:9px;font-family:var(--font-mono);background:var(--red-dim);color:var(--red);padding:1px 6px;border-radius:8px;flex-shrink:0}
+.nav-chip{margin-left:auto;font-size:9px;font-family:var(--font-mono);color:var(--text-3);padding:1px 5px;border:1px solid var(--border);border-radius:4px}
+.sidebar-footer{margin-top:auto;padding:11px 14px;border-top:1px solid var(--border);flex-shrink:0}
+.footer-status{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.footer-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);animation:blink 2.4s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.footer-txt{font-size:11px;color:var(--text-2);font-family:var(--font-mono)}
+.footer-time{font-size:10px;color:var(--text-3);font-family:var(--font-mono)}
+.main{margin-left:var(--sidebar-w);flex:1;min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+.topbar{height:50px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;position:sticky;top:0;z-index:5}
+.topbar-crumb{font-size:13px;font-weight:500;color:var(--text)}
+.topbar-sep{color:var(--text-3)}
+.topbar-page{font-size:12px;color:var(--text-3);font-family:var(--font-mono)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.topbar-clock{font-size:11px;color:var(--text-3);font-family:var(--font-mono)}
+.page{padding:18px 20px 48px;flex:1}
+
+/* filter bar */
+.filter-bar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.f-select{background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--text-2);font-family:var(--font-mono);font-size:11px;padding:5px 8px;outline:none;cursor:pointer}
+.f-select:focus{border-color:var(--accent)}
+.f-input{background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:5px 10px;outline:none;min-width:160px}
+.f-input:focus{border-color:var(--accent)}
+.f-input::placeholder{color:var(--text-3)}
+.f-stat{font-size:11px;color:var(--text-3);font-family:var(--font-mono);margin-left:auto}
+.f-stat strong{color:var(--text-2)}
+
+/* chart panel */
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px}
+.panel-title{font-size:10px;font-weight:500;color:var(--text-3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:12px}
+
+/* Timeline */
+.tl-outer{display:flex;flex-direction:column;gap:10px}
+.tl-group{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.tl-group-header{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+.tl-group-ip{font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--text);flex:1}
+.tl-group-meta{font-size:10px;font-family:var(--font-mono);color:var(--text-3)}
+.tl-group-meta strong{color:var(--text-2)}
+.ip-link{color:var(--accent);font-size:10px;font-family:var(--font-mono);text-decoration:none}
+.ip-link:hover{text-decoration:underline}
+
+/* Timeline events */
+.tl-events{padding:4px 0}
+.tl-event{display:flex;align-items:flex-start;gap:0;padding:0 16px;position:relative}
+.tl-event:last-child .tl-line-bottom{display:none}
+.tl-left{display:flex;flex-direction:column;align-items:center;width:20px;flex-shrink:0;margin-right:12px}
+.tl-dot{width:8px;height:8px;border-radius:50%;border:1.5px solid;flex-shrink:0;margin-top:10px;z-index:1;position:relative;background:var(--bg)}
+.tl-line{width:1px;flex:1;min-height:12px;background:var(--border)}
+.tl-content{flex:1;padding:8px 0;border-bottom:1px solid var(--border)}
+.tl-event:last-child .tl-content{border-bottom:none}
+.tl-event-top{display:flex;align-items:center;gap:8px;margin-bottom:3px}
+.tl-ts{font-size:10px;font-family:var(--font-mono);color:var(--text-3);flex-shrink:0}
+.tl-rule{font-size:11px;color:var(--text);flex:1}
+.tl-cnt{font-size:10px;font-family:var(--font-mono);color:var(--text-2)}
+.tl-msg{font-size:10px;color:var(--text-3);font-family:var(--font-mono)}
+
+/* pill */
+.pill{display:inline-block;font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:3px;font-weight:500;letter-spacing:.05em}
+.pill-critical{background:var(--red-dim);color:var(--red)}
+.pill-high{background:var(--orange-dim);color:var(--orange)}
+.pill-medium{background:var(--amber-dim);color:var(--amber)}
+.pill-low{background:var(--green-dim);color:var(--green)}
+.empty{text-align:center;padding:40px;color:var(--text-3);font-family:var(--font-mono);font-size:12px}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:2px}
+</style>
+</head>
+<body>
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"><path d="M12 2L3 7v5c0 5 4 9.3 9 10.5C17 21.3 21 17 21 12V7z"/></svg></div>
+    <div><div class="brand-name">Log-IDS</div><div class="brand-ver">v0.1.0 · :8888</div></div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Overview</div>
+    <a href="/" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </a>
+    <a href="/alerts.html" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Alerts
+      <span class="nav-badge" id="nav-crit">—</span>
+    </a>
+    <a href="/live" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 010 8.49M7.76 16.24a6 6 0 010-8.49M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>
+      Live Logs
+    </a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Investigation</div>
+    <a href="/ip-profile.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>IP Profile</a>
+    <a href="/alert-detail.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Alert Detail</a>
+    <a href="/brute-force.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Brute Force</a>
+    <a href="/timeline.html" class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>Attack Timeline</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">System</div>
+    <a href="/rules.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Rules Manager</a>
+    <a href="/sources.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 22V4a2 2 0 012-2h12a2 2 0 012 2v18"/><path d="M2 22h20"/><rect x="8" y="6" width="8" height="4"/></svg>Log Sources</a>
+    <a href="/reports.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Reports</a>
+    <a href="/settings.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>Settings</a>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="footer-status">
+      <div class="footer-dot"></div>
+      <span class="footer-txt">system online</span>
+    </div>
+    <div class="footer-time" id="footer-time">--:--:-- UTC</div>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-crumb">Log-IDS</span><span class="topbar-sep"> / </span><span class="topbar-page">attack-timeline</span>
+    <div class="topbar-right"><span class="topbar-clock" id="topbar-clock">--:--:--</span></div>
+  </div>
+  <div class="page">
+
+    <!-- 24h chart -->
+    <div class="panel">
+      <div class="panel-title">Alert Volume — Last 24 Hours</div>
+      <div style="position:relative;width:100%;height:140px">
+        <canvas id="timeChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+      <input class="f-input" id="f-ip" type="text" placeholder="filter by IP…" oninput="render()">
+      <select class="f-select" id="f-sev" onchange="render()">
+        <option value="">All severities</option>
+        <option value="CRITICAL">Critical</option>
+        <option value="HIGH">High</option>
+        <option value="MEDIUM">Medium</option>
+        <option value="LOW">Low</option>
+      </select>
+      <select class="f-select" id="f-window" onchange="load()">
+        <option value="3600000">Last 1 hour</option>
+        <option value="21600000">Last 6 hours</option>
+        <option value="86400000" selected>Last 24 hours</option>
+        <option value="0">All time</option>
+      </select>
+      <select class="f-select" id="f-group" onchange="render()">
+        <option value="ip">Group by IP</option>
+        <option value="time">Flat chronological</option>
+      </select>
+      <span class="f-stat" id="f-stat">loading…</span>
+    </div>
+
+    <div id="tl-outer" class="tl-outer"><div class="empty">loading…</div></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const el=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const tick=()=>{const s=new Date().toUTCString().slice(17,25)+' UTC';el('topbar-clock').textContent=s;el('footer-time').textContent=s};
+setInterval(tick,1000);tick();
+const SEV_DOT={CRITICAL:'#f87171',HIGH:'#fb923c',MEDIUM:'#fbbf24',LOW:'#34d399'};
+const pill=sev=>`<span class="pill pill-${(sev||'').toLowerCase()}">${esc(sev)}</span>`;
+const fmtTs=ts=>{const d=new Date(ts);return isNaN(d)?'—':d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour12:false})};
+
+let allAlerts=[], chart=null;
+
+async function load(){
+  const windowMs=+el('f-window').value;
+  const cutoff=windowMs>0?Date.now()-windowMs:0;
+  try{const r=await fetch('/alerts?limit=2000');allAlerts=r.ok?(await r.json()??[]):[];}catch{allAlerts=[];}
+  if(cutoff)allAlerts=allAlerts.filter(a=>new Date(a.Timestamp)>=cutoff);
+
+  const crit=allAlerts.filter(a=>a.Severity==='CRITICAL').length;
+  const nb=el('nav-crit');if(nb)nb.textContent=crit||'—';
+
+  buildChart();
+  render();
+}
+
+function buildChart(){
+  const bins=new Array(24).fill(0);
+  const now=Date.now();
+  allAlerts.forEach(a=>{
+    const h=Math.floor((now-new Date(a.Timestamp))/3600000);
+    if(h>=0&&h<24)bins[23-h]++;
+  });
+  const labels=bins.map((_,i)=>{const h=23-i;return h===0?'now':`-${h}h`});
+  const gc='rgba(96,130,200,0.07)',tc='#3d5070';
+  if(!chart){
+    chart=new Chart(el('timeChart'),{
+      type:'bar',
+      data:{labels,datasets:[{label:'Alerts',data:bins,backgroundColor:'rgba(56,189,248,0.2)',borderColor:'#38bdf8',borderWidth:1,borderRadius:2}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+        scales:{x:{ticks:{color:tc,font:{size:9,family:"'JetBrains Mono'"},maxTicksLimit:12,autoSkip:true},grid:{color:gc},border:{display:false}},
+          y:{min:0,ticks:{color:tc,font:{size:9,family:"'JetBrains Mono'"},maxTicksLimit:4,stepSize:1},grid:{color:gc},border:{display:false}}}}
+    });
+  } else {
+    chart.data.labels=labels;chart.data.datasets[0].data=bins;chart.update('none');
+  }
+}
+
+function render(){
+  const ipQ=el('f-ip').value.toLowerCase();
+  const sev=el('f-sev').value;
+  const group=el('f-group').value;
+
+  let alerts=[...allAlerts].filter(a=>{
+    if(sev&&a.Severity!==sev)return false;
+    if(ipQ&&!(a.SourceIP||'').toLowerCase().includes(ipQ))return false;
+    return true;
+  }).sort((a,b)=>new Date(b.Timestamp)-new Date(a.Timestamp));
+
+  el('f-stat').innerHTML=`<strong>${alerts.length}</strong> alerts`;
+  const box=el('tl-outer');
+  if(!alerts.length){box.innerHTML='<div class="empty">no alerts in selected window</div>';return;}
+
+  if(group==='time'){
+    // Flat list capped at 200
+    const shown=alerts.slice(0,200);
+    box.innerHTML=`<div class="tl-group">
+      <div class="tl-group-header"><div class="tl-group-ip">All Events</div><div class="tl-group-meta">latest <strong>${shown.length}</strong></div></div>
+      <div class="tl-events">${shown.map(a=>eventHTML(a)).join('')}</div>
+    </div>`;
+    return;
+  }
+
+  // Group by IP
+  const byIP={};
+  alerts.forEach(a=>{
+    const ip=a.SourceIP||'—';
+    if(!byIP[ip])byIP[ip]=[];
+    byIP[ip].push(a);
+  });
+  const groups=Object.entries(byIP).sort((a,b)=>new Date(b[1][0].Timestamp)-new Date(a[1][0].Timestamp));
+
+  box.innerHTML=groups.map(([ip,events])=>`<div class="tl-group">
+    <div class="tl-group-header">
+      <div class="tl-group-ip">${esc(ip)}</div>
+      <div class="tl-group-meta"><strong>${events.length}</strong> alerts · last ${fmtTs(events[0].Timestamp)}</div>
+      <a class="ip-link" href="/ip-profile.html?ip=${encodeURIComponent(ip)}">profile →</a>
+    </div>
+    <div class="tl-events">${events.slice(0,20).map(a=>eventHTML(a)).join('')}</div>
+  </div>`).join('');
+}
+
+function eventHTML(a){
+  const dotColor=SEV_DOT[a.Severity]||'#3d5070';
+  return`<div class="tl-event">
+    <div class="tl-left">
+      <div class="tl-dot" style="border-color:${dotColor};background:${dotColor}22"></div>
+      <div class="tl-line"></div>
+    </div>
+    <div class="tl-content">
+      <div class="tl-event-top">
+        <span class="tl-ts">${fmtTs(a.Timestamp)}</span>
+        ${pill(a.Severity)}
+        <span class="tl-rule"><a href="/alert-detail.html?id=${encodeURIComponent(a.ID)}" style="color:var(--text);text-decoration:none">${esc(a.RuleName||'—')}</a></span>
+        <span class="tl-cnt">×${a.EventCount||1}</span>
+      </div>
+      <div class="tl-msg">${esc(a.Message||'')}</div>
+    </div>
+  </div>`;
+}
+
+load();
+setInterval(load,20000);
+</script>
+</body>
+</html>

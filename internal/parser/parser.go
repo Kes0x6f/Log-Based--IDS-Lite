@@ -57,6 +57,7 @@ func ParserWorker(input <-chan collector.RawLog, output chan<- *model.Normalized
 		if log.Source == "audit" && strings.HasPrefix(line, "type=") {
 			event := parsers.ParseRawAuditLine(line, log.Source)
 			if event != nil && event.EventType != "" {
+				fmt.Println(event)
 				output <- event
 			}
 			continue

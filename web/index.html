@@ -1,170 +1,897 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>IDS Dashboard</title>
-    <link rel="stylesheet" href="/web.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>IDS — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #07090f;
+  --surface:   #0c1220;
+  --surface-2: #101928;
+  --surface-3: #15213a;
+  --border:    rgba(96,130,200,0.1);
+  --border-2:  rgba(96,130,200,0.2);
+  --text:      #dde4f0;
+  --text-2:    #7a8cad;
+  --text-3:    #3d5070;
+  --accent:    #38bdf8;
+  --accent-dim:rgba(56,189,248,0.1);
+  --red:       #f87171;
+  --red-dim:   rgba(248,113,113,0.1);
+  --orange:    #fb923c;
+  --orange-dim:rgba(251,146,60,0.1);
+  --amber:     #fbbf24;
+  --amber-dim: rgba(251,191,36,0.1);
+  --green:     #34d399;
+  --green-dim: rgba(52,211,153,0.1);
+  --blue:      #60a5fa;
+  --sidebar-w: 224px;
+  --font-ui:   'IBM Plex Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+html, body { height: 100%; }
+body {
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  display: flex;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w);
+  min-height: 100vh;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 10;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.sidebar::-webkit-scrollbar { display: none; }
+
+.sidebar-brand {
+  padding: 16px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.brand-icon {
+  width: 30px; height: 30px;
+  background: var(--accent-dim);
+  border: 1px solid rgba(56,189,248,0.25);
+  border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.brand-icon svg { width: 15px; height: 15px; }
+.brand-name { font-size: 13px; font-weight: 500; color: var(--text); }
+.brand-ver  { font-size: 10px; color: var(--text-3); font-family: var(--font-mono); margin-top: 1px; }
+
+.nav-section { padding: 10px 0 4px; }
+.nav-label {
+  font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-3); padding: 4px 14px 5px; font-weight: 500;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 14px;
+  font-size: 12px; color: var(--text-2);
+  text-decoration: none; cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+  position: relative; border-radius: 0;
+  white-space: nowrap;
+}
+.nav-item:hover { color: var(--text); background: rgba(96,130,200,0.05); }
+.nav-item.active {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 2px; background: var(--accent);
+  border-radius: 0 2px 2px 0;
+}
+.nav-item svg { width: 13px; height: 13px; flex-shrink: 0; }
+.nav-item.active svg { opacity: 1; }
+.nav-badge {
+  margin-left: auto; font-size: 9px; font-family: var(--font-mono);
+  background: var(--red-dim); color: var(--red);
+  padding: 1px 6px; border-radius: 8px; flex-shrink: 0;
+}
+.nav-chip {
+  margin-left: auto; font-size: 9px; font-family: var(--font-mono);
+  color: var(--text-3); padding: 1px 5px;
+  border: 1px solid var(--border); border-radius: 4px;
+}
+
+.sidebar-footer {
+  margin-top: auto; padding: 11px 14px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.footer-status { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.footer-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 5px var(--green);
+  animation: blink 2.4s infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+.footer-txt { font-size: 11px; color: var(--text-2); font-family: var(--font-mono); }
+.footer-time { font-size: 10px; color: var(--text-3); font-family: var(--font-mono); }
+
+/* ── Main area ───────────────────────────────────────────────────── */
+.main {
+  margin-left: var(--sidebar-w);
+  flex: 1; min-height: 100vh;
+  display: flex; flex-direction: column;
+  overflow-x: hidden;
+}
+
+/* ── Topbar ──────────────────────────────────────────────────────── */
+.topbar {
+  height: 50px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 20px; gap: 12px;
+  flex-shrink: 0;
+  position: sticky; top: 0; z-index: 5;
+}
+.topbar-crumb {
+  font-size: 13px; font-weight: 500; color: var(--text);
+}
+.topbar-sep { color: var(--text-3); font-size: 14px; }
+.topbar-page { font-size: 12px; color: var(--text-3); font-family: var(--font-mono); }
+.topbar-right {
+  margin-left: auto; display: flex;
+  align-items: center; gap: 18px;
+}
+.live-pill {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-2); font-family: var(--font-mono);
+  background: var(--green-dim); padding: 3px 10px; border-radius: 20px;
+  border: 1px solid rgba(52,211,153,0.2);
+}
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); animation: blink 2s infinite;
+}
+.topbar-clock { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); }
+.topbar-refresh {
+  background: var(--surface-2); border: 1px solid var(--border-2);
+  border-radius: 5px; color: var(--text-2); font-size: 11px;
+  font-family: var(--font-mono); padding: 4px 10px; cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.topbar-refresh:hover { color: var(--text); border-color: var(--accent); }
+
+/* ── Page ────────────────────────────────────────────────────────── */
+.page { padding: 18px 20px 36px; flex: 1; }
+
+.row-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px; margin-top: 4px;
+}
+.row-label {
+  font-size: 10px; font-weight: 500; color: var(--text-3);
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+.row-link {
+  font-size: 11px; color: var(--accent); text-decoration: none;
+  font-family: var(--font-mono); opacity: 0.75;
+}
+.row-link:hover { opacity: 1; }
+.row-meta { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); }
+
+/* ── Metric cards ────────────────────────────────────────────────── */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0,1fr));
+  gap: 8px; margin-bottom: 12px;
+}
+.mcard {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 13px 15px;
+  position: relative; overflow: hidden;
+}
+.mcard::after {
+  content: ''; position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: var(--c-accent, var(--border-2));
+}
+.mcard-label {
+  font-size: 10px; color: var(--text-3); margin-bottom: 7px;
+  font-weight: 500; letter-spacing: 0.04em;
+}
+.mcard-value {
+  font-size: 26px; font-weight: 500;
+  font-family: var(--font-mono); line-height: 1;
+  color: var(--text); margin-bottom: 5px;
+  transition: color 0.3s;
+}
+.mcard-value.loading { color: var(--text-3); }
+.mcard-sub { font-size: 10px; color: var(--text-3); font-family: var(--font-mono); }
+.mcard-sub.warn { color: var(--red); }
+.mcard-sub.ok   { color: var(--green); }
+
+/* ── Panel ───────────────────────────────────────────────────────── */
+.panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px 16px;
+}
+.phead {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.ptitle {
+  font-size: 10px; font-weight: 500; color: var(--text-3);
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+.pmeta { font-size: 10px; color: var(--text-3); font-family: var(--font-mono); }
+
+/* ── Grid layouts ────────────────────────────────────────────────── */
+.row-2-1 {
+  display: grid; grid-template-columns: 240px minmax(0,1fr);
+  gap: 8px; margin-bottom: 8px;
+}
+.row-1-2 {
+  display: grid; grid-template-columns: minmax(0,1fr) 240px;
+  gap: 8px; margin-bottom: 8px;
+}
+.row-2col {
+  display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+  gap: 8px; margin-bottom: 8px;
+}
+
+/* ── Severity donut ──────────────────────────────────────────────── */
+.donut-wrap {
+  position: relative; width: 130px; height: 130px;
+  margin: 0 auto 12px;
+}
+.donut-center {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.donut-n     { font-size: 22px; font-weight: 500; color: var(--text); font-family: var(--font-mono); line-height: 1; }
+.donut-lbl   { font-size: 10px; color: var(--text-3); margin-top: 3px; }
+
+.sev-list { display: flex; flex-direction: column; gap: 6px; }
+.sev-row  { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.sev-pip  { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.sev-name { flex: 1; color: var(--text-2); }
+.sev-pct  { color: var(--text-3); font-family: var(--font-mono); font-size: 10px; min-width: 30px; text-align: right; }
+.sev-n    { color: var(--text); font-family: var(--font-mono); font-weight: 500; min-width: 32px; text-align: right; }
+
+/* ── Category bars ───────────────────────────────────────────────── */
+.cat-list { display: flex; flex-direction: column; gap: 7px; }
+.cat-row  { display: flex; align-items: center; gap: 9px; }
+.cat-name { min-width: 108px; font-size: 11px; color: var(--text-2); white-space: nowrap; }
+.cat-bg   { flex: 1; height: 4px; background: var(--surface-3); border-radius: 2px; overflow: hidden; }
+.cat-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+.cat-n    { min-width: 30px; text-align: right; font-family: var(--font-mono); font-size: 10px; font-weight: 500; color: var(--text); }
+
+/* ── Top IPs ─────────────────────────────────────────────────────── */
+.ip-list { display: flex; flex-direction: column; }
+.ip-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0; border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.ip-row:last-child { border-bottom: none; }
+.ip-rank  { width: 14px; color: var(--text-3); font-family: var(--font-mono); font-size: 10px; text-align: right; }
+.ip-addr  { flex: 1; font-family: var(--font-mono); font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ip-bbar  { width: 36px; height: 3px; background: var(--surface-3); border-radius: 2px; overflow: hidden; flex-shrink: 0; }
+.ip-bfill { height: 100%; background: var(--accent); border-radius: 2px; }
+.ip-n     { font-family: var(--font-mono); font-size: 10px; font-weight: 500; color: var(--text-2); flex-shrink: 0; }
+
+/* ── Alerts table ────────────────────────────────────────────────── */
+.tbl-wrap { overflow-x: auto; margin: 0 -16px; padding: 0 16px; }
+.atbl { width: 100%; border-collapse: collapse; font-size: 11px; min-width: 660px; }
+.atbl th {
+  text-align: left; padding: 0 10px 9px 0;
+  font-size: 9px; font-weight: 500; color: var(--text-3);
+  letter-spacing: 0.09em; text-transform: uppercase;
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.atbl td {
+  padding: 7px 10px 7px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2); vertical-align: middle;
+}
+.atbl tr:last-child td { border-bottom: none; }
+.atbl tr:hover td { color: var(--text); background: rgba(56,189,248,0.03); }
+.atbl .mono { font-family: var(--font-mono); font-size: 10px; }
+.atbl .rule { color: var(--text); font-size: 11px; }
+.atbl .msg  { font-size: 10px; color: var(--text-3); max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.atbl .cnt  { text-align: right; font-family: var(--font-mono); font-weight: 500; color: var(--text); }
+
+.pill {
+  display: inline-block; font-size: 9px; font-family: var(--font-mono);
+  padding: 2px 7px; border-radius: 3px; font-weight: 500; letter-spacing: 0.05em;
+}
+.pill-critical { background: var(--red-dim);    color: var(--red);    }
+.pill-high     { background: var(--orange-dim); color: var(--orange); }
+.pill-medium   { background: var(--amber-dim);  color: var(--amber);  }
+.pill-low      { background: var(--green-dim);  color: var(--green);  }
+
+/* ── Top rules ───────────────────────────────────────────────────── */
+.rules-list { display: flex; flex-direction: column; }
+.rule-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 11px;
+}
+.rule-row:last-child { border-bottom: none; }
+.rule-name { flex: 1; color: var(--text-2); font-size: 11px; }
+.rule-n { font-family: var(--font-mono); font-size: 10px; font-weight: 500; color: var(--text); }
+
+/* ── Live logs ───────────────────────────────────────────────────── */
+.log-controls {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+}
+.log-input {
+  flex: 1; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--text); font-family: var(--font-mono);
+  font-size: 11px; padding: 5px 10px; outline: none;
+  transition: border-color 0.2s;
+}
+.log-input::placeholder { color: var(--text-3); }
+.log-input:focus { border-color: var(--accent); }
+.log-btn {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--text-2); font-family: var(--font-mono);
+  font-size: 10px; padding: 5px 10px; cursor: pointer;
+  transition: color 0.12s, border-color 0.12s; white-space: nowrap;
+}
+.log-btn:hover { color: var(--text); border-color: var(--border-2); }
+.log-btn.on { color: var(--green); border-color: rgba(52,211,153,0.3); }
+.log-box {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 6px; height: 190px; overflow-y: auto;
+  padding: 10px 12px; font-family: var(--font-mono); font-size: 10.5px;
+  line-height: 1.75; scrollbar-width: thin; scrollbar-color: var(--border-2) transparent;
+}
+.ll { white-space: pre-wrap; word-break: break-all; color: var(--text-3); }
+.ll.e { color: #b86a6a; }
+.ll.w { color: #9c7e3a; }
+.ll.i { color: #4a7a9c; }
+.ll.s { color: #4d9e80; }
+
+/* ── Misc ────────────────────────────────────────────────────────── */
+.empty { color: var(--text-3); font-size: 11px; font-family: var(--font-mono); padding: 14px 0; text-align: center; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+</style>
 </head>
 <body>
 
-<header class="header">
-    <h1>Log-Based IDS Dashboard</h1>
-    <span class="status online">● System Online</span>
-</header>
+<!-- ── Sidebar ────────────────────────────────────────────────────── -->
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L3 7v5c0 5 4 9.3 9 10.5C17 21.3 21 17 21 12V7z"/>
+      </svg>
+    </div>
+    <div>
+      <div class="brand-name">Log-IDS</div>
+      <div class="brand-ver">v0.1.0 · :8888</div>
+    </div>
+  </div>
 
-<section class="cards">
-    <div class="card">
-        <h3>Total Logs</h3>
-        <p id="total-logs">0</p>
-    </div>
-    <div class="card">
-        <h3>Alerts</h3>
-        <p id="alert-count">0</p>
-    </div>
-    <div class="card danger">
-        <h3>High Severity</h3>
-        <p id="high-count">0</p>
-    </div>
-    <div class="card">
-        <h3>Unique IPs</h3>
-        <p id="unique-ip-count">0</p>
-    </div>
-</section>
+  <div class="nav-section">
+    <div class="nav-label">Overview</div>
+    <a href="/" class="nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </a>
+    <a href="/alerts.html" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Alerts
+      <span class="nav-badge" id="nav-crit">—</span>
+    </a>
+    <a href="/live" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 010 8.49M7.76 16.24a6 6 0 010-8.49M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>
+      Live Logs
+    </a>
+  </div>
 
-<section class="panel">
-    <h2>Recent Alerts</h2>
-    <table>
-        <thead>
+  <div class="nav-section">
+    <div class="nav-label">Investigation</div>
+    <a href="/ip-profile.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>IP Profile</a>
+    <a href="/alert-detail.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Alert Detail</a>
+    <a href="/brute-force.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Brute Force</a>
+    <a href="/timeline.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>Attack Timeline</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">System</div>
+    <a href="/rules.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Rules Manager</a>
+    <a href="/sources.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 22V4a2 2 0 012-2h12a2 2 0 012 2v18"/><path d="M2 22h20"/><rect x="8" y="6" width="8" height="4"/></svg>Log Sources</a>
+    <a href="/reports.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Reports</a>
+    <a href="/settings.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>Settings</a>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="footer-status">
+      <div class="footer-dot"></div>
+      <span class="footer-txt">system online</span>
+    </div>
+    <div class="footer-time" id="footer-time">--:--:-- UTC</div>
+  </div>
+</nav>
+
+<!-- ── Main ───────────────────────────────────────────────────────── -->
+<div class="main">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <span class="topbar-crumb">Log-IDS</span>
+    <span class="topbar-sep">/</span>
+    <span class="topbar-page">dashboard</span>
+    <div class="topbar-right">
+      <div class="live-pill">
+        <div class="live-dot"></div>
+        <span>live</span>
+      </div>
+      <span class="topbar-clock" id="topbar-clock">--:--:--</span>
+      <button class="topbar-refresh" onclick="refreshAll()">↻ refresh</button>
+    </div>
+  </div>
+
+  <div class="page">
+
+    <!-- ── Metric cards ──────────────────────────────────────────── -->
+    <div class="row-head">
+      <span class="row-label">Summary</span>
+      <span class="row-meta" id="refresh-ts">refreshing…</span>
+    </div>
+    <div class="cards-grid">
+      <div class="mcard" style="--c-accent:var(--accent)">
+        <div class="mcard-label">Total Alerts</div>
+        <div class="mcard-value loading" id="c-total">—</div>
+        <div class="mcard-sub" id="c-total-sub">all time</div>
+      </div>
+      <div class="mcard" style="--c-accent:var(--red)">
+        <div class="mcard-label">Critical</div>
+        <div class="mcard-value loading" id="c-crit" style="color:var(--red)">—</div>
+        <div class="mcard-sub" id="c-crit-sub">immediate action</div>
+      </div>
+      <div class="mcard" style="--c-accent:var(--orange)">
+        <div class="mcard-label">High</div>
+        <div class="mcard-value loading" id="c-high" style="color:var(--orange)">—</div>
+        <div class="mcard-sub" id="c-high-sub">high severity</div>
+      </div>
+      <div class="mcard" style="--c-accent:var(--amber)">
+        <div class="mcard-label">Medium</div>
+        <div class="mcard-value loading" id="c-med" style="color:var(--amber)">—</div>
+        <div class="mcard-sub" id="c-med-sub">medium severity</div>
+      </div>
+      <div class="mcard" style="--c-accent:var(--green)">
+        <div class="mcard-label">Low</div>
+        <div class="mcard-value loading" id="c-low" style="color:var(--green)">—</div>
+        <div class="mcard-sub" id="c-low-sub">low severity</div>
+      </div>
+      <div class="mcard" style="--c-accent:var(--blue)">
+        <div class="mcard-label">Unique IPs</div>
+        <div class="mcard-value loading" id="c-ips">—</div>
+        <div class="mcard-sub">distinct sources</div>
+      </div>
+    </div>
+
+    <!-- ── Severity donut + 24h timeline ─────────────────────────── -->
+    <div class="row-2-1">
+      <div class="panel">
+        <div class="phead">
+          <span class="ptitle">Severity</span>
+          <span class="pmeta">all time</span>
+        </div>
+        <div class="donut-wrap">
+          <canvas id="sevChart" role="img" aria-label="Severity distribution donut chart">Severity breakdown.</canvas>
+          <div class="donut-center">
+            <div class="donut-n" id="donut-n">—</div>
+            <div class="donut-lbl">total</div>
+          </div>
+        </div>
+        <div class="sev-list" id="sev-list"><div class="empty">loading…</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="phead">
+          <span class="ptitle">Alert Volume</span>
+          <span class="pmeta" id="timeline-meta">last 200 events · 24 h window</span>
+        </div>
+        <div style="position:relative;width:100%;height:185px">
+          <canvas id="timeChart" role="img" aria-label="Alert volume over last 24 hours">Alert timeline.</canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Categories + Top IPs ───────────────────────────────────── -->
+    <div class="row-1-2">
+      <div class="panel">
+        <div class="phead">
+          <span class="ptitle">Alert Categories</span>
+          <span class="pmeta" id="cat-meta">—</span>
+        </div>
+        <div class="cat-list" id="cat-list"><div class="empty">loading…</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="phead">
+          <span class="ptitle">Top Attackers</span>
+          <span class="pmeta">by alert count</span>
+        </div>
+        <div class="ip-list" id="ip-list"><div class="empty">loading…</div></div>
+      </div>
+    </div>
+
+    <!-- ── Recent alerts table ────────────────────────────────────── -->
+    <div class="row-head" style="margin-top:4px">
+      <span class="row-label">Recent Alerts</span>
+      <a href="/alerts.html" class="row-link">view all →</a>
+    </div>
+    <div class="panel" style="margin-bottom:8px">
+      <div class="tbl-wrap">
+        <table class="atbl">
+          <thead>
             <tr>
-                <th>Timestamp</th>
-                <th>Rule</th>
-                <th>Source IP</th>
-                <th>Severity</th>
-                <th>Count</th>
+              <th style="width:82px">Time</th>
+              <th style="width:76px">Severity</th>
+              <th>Rule</th>
+              <th style="width:124px">Source IP</th>
+              <th style="width:72px">User</th>
+              <th>Message</th>
+              <th style="width:44px;text-align:right">Count</th>
             </tr>
-        </thead>
-        <tbody id="alerts-body">
-            
-        </tbody>
-    </table>
-</section>
+          </thead>
+          <tbody id="alerts-tbody">
+            <tr><td colspan="7" class="empty">loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-<section class="panel">
-    <h2>Log Viewer</h2>
-     <pre id="logs"></pre>
-</section>
+    <!-- ── Live logs + Top rules ──────────────────────────────────── -->
+    <div class="row-2col">
+      <div class="panel">
+        <div class="phead">
+          <span class="ptitle">Live Log Stream</span>
+          <button class="log-btn on" id="ascroll-btn" onclick="toggleAutoScroll()">auto-scroll on</button>
+        </div>
+        <div class="log-controls">
+          <input class="log-input" type="text" id="log-filter" placeholder="filter lines…" oninput="filterLogs()">
+          <button class="log-btn" onclick="clearLogs()">clear</button>
+        </div>
+        <div class="log-box" id="log-box">
+          <div class="ll">connecting to /stream/logs…</div>
+        </div>
+      </div>
 
+      <div class="panel">
+        <div class="phead">
+          <span class="ptitle">Top Rules</span>
+          <span class="pmeta">by fire count</span>
+        </div>
+        <div class="rules-list" id="rules-list"><div class="empty">loading…</div></div>
+      </div>
+    </div>
+
+  </div><!-- /page -->
+</div><!-- /main -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// ── Constants ───────────────────────────────────────────────────────
+const SEVCOLORS = {
+  CRITICAL: '#f87171',
+  HIGH:     '#fb923c',
+  MEDIUM:   '#fbbf24',
+  LOW:      '#34d399',
+};
+const CATCOLORS = [
+  '#38bdf8','#7c6ddd','#fb923c','#f87171',
+  '#34d399','#f472b6','#fbbf24','#60a5fa','#a78bfa',
+];
+
+let sevChart  = null;
+let timeChart = null;
+let allAlerts = [];
+let logLines  = [];
+let autoScroll = true;
+
+// ── Clock ────────────────────────────────────────────────────────────
+function tickClock() {
+  const s = new Date().toUTCString().slice(17, 25);
+  document.getElementById('topbar-clock').textContent = s + ' UTC';
+  document.getElementById('footer-time').textContent  = s + ' UTC';
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+// ── Utils ────────────────────────────────────────────────────────────
+const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const fmt = n  => (n == null ? '—' : Number(n).toLocaleString());
+const pill = sev => {
+  const s = (sev||'').toLowerCase();
+  return `<span class="pill pill-${s}">${esc(sev)}</span>`;
+};
+const fmtTime = ts => {
+  const d = new Date(ts); return isNaN(d) ? '—' : d.toLocaleTimeString('en-GB',{hour12:false});
+};
+async function api(url) {
+  try { const r = await fetch(url); return r.ok ? r.json() : null; } catch { return null; }
+}
+
+// ── Cards + severity data ────────────────────────────────────────────
+async function refreshCards() {
+  const [tot, crit, high, med, low, ips] = await Promise.all([
+    api('/alerts/count'),
+    api('/alerts/severity-count?severity=CRITICAL'),
+    api('/alerts/severity-count?severity=HIGH'),
+    api('/alerts/severity-count?severity=MEDIUM'),
+    api('/alerts/severity-count?severity=LOW'),
+    api('/alerts/unique-ips'),
+  ]);
+
+  const set = (id, v) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = fmt(v); el.classList.remove('loading');
+  };
+  const sub = (id, txt, cls='') => {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = txt; el.className = 'mcard-sub ' + cls; }
+  };
+
+  const C = crit?.count ?? null, H = high?.count ?? null;
+  const M = med?.count  ?? null, L = low?.count  ?? null;
+  const T = tot?.count  ?? null, I = ips?.count  ?? null;
+
+  set('c-total', T); set('c-crit', C); set('c-high', H);
+  set('c-med',   M); set('c-low',  L); set('c-ips',  I);
+
+  if (C != null) sub('c-crit-sub', C > 0 ? 'needs attention' : 'all clear', C > 0 ? 'warn' : 'ok');
+  if (H != null) sub('c-high-sub', H > 0 ? 'review needed'  : 'all clear', H > 0 ? '' : 'ok');
+
+  const navBadge = document.getElementById('nav-crit');
+  if (navBadge) navBadge.textContent = C ?? '—';
+
+  const now = new Date();
+  document.getElementById('refresh-ts').textContent =
+    'updated ' + now.toLocaleTimeString('en-GB',{hour12:false});
+
+  updateSevChart(C, H, M, L);
+}
+
+// ── Severity donut ───────────────────────────────────────────────────
+function updateSevChart(C, H, M, L) {
+  const data   = [C||0, H||0, M||0, L||0];
+  const colors = [SEVCOLORS.CRITICAL, SEVCOLORS.HIGH, SEVCOLORS.MEDIUM, SEVCOLORS.LOW];
+  const total  = data.reduce((a,b)=>a+b, 0);
+
+  document.getElementById('donut-n').textContent = total > 0 ? total.toLocaleString() : '—';
+
+  if (!sevChart) {
+    sevChart = new Chart(document.getElementById('sevChart'), {
+      type: 'doughnut',
+      data: { labels:['Critical','High','Medium','Low'], datasets:[{ data, backgroundColor:colors, borderWidth:0, hoverOffset:4 }] },
+      options: {
+        responsive:true, maintainAspectRatio:false, cutout:'70%',
+        plugins: {
+          legend: { display:false },
+          tooltip: { callbacks:{ label: c => ' ' + c.label + ': ' + c.raw.toLocaleString() } }
+        }
+      }
+    });
+  } else {
+    sevChart.data.datasets[0].data = data; sevChart.update('none');
+  }
+
+  const list = document.getElementById('sev-list');
+  if (!list) return;
+  const rows = [{n:'Critical',v:C||0,c:SEVCOLORS.CRITICAL},{n:'High',v:H||0,c:SEVCOLORS.HIGH},{n:'Medium',v:M||0,c:SEVCOLORS.MEDIUM},{n:'Low',v:L||0,c:SEVCOLORS.LOW}];
+  list.innerHTML = rows.map(r => {
+    const pct = total > 0 ? Math.round(r.v/total*100) : 0;
+    return `<div class="sev-row">
+      <div class="sev-pip" style="background:${r.c}"></div>
+      <span class="sev-name">${r.n}</span>
+      <span class="sev-pct">${pct}%</span>
+      <span class="sev-n">${r.v.toLocaleString()}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Recent alerts (drives timeline, categories, IPs, rules) ──────────
+async function refreshAlerts() {
+  const data = await api('/alerts/recent?limit=200');
+  if (!Array.isArray(data)) return;
+  allAlerts = data;
+
+  renderTable(allAlerts.slice(0, 12));
+  renderTimeline(allAlerts);
+  renderCategories(allAlerts);
+  renderTopIPs(allAlerts);
+  renderTopRules(allAlerts);
+}
+
+// ── Alerts table ─────────────────────────────────────────────────────
+function renderTable(alerts) {
+  const tbody = document.getElementById('alerts-tbody');
+  if (!tbody) return;
+  if (!alerts?.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">no alerts yet</td></tr>'; return;
+  }
+  tbody.innerHTML = alerts.map(a => `<tr>
+    <td class="mono">${fmtTime(a.Timestamp)}</td>
+    <td>${pill(a.Severity)}</td>
+    <td class="rule">${esc(a.RuleName||'—')}</td>
+    <td class="mono">${esc(a.SourceIP||'—')}</td>
+    <td class="mono">${esc(a.Username||'—')}</td>
+    <td class="msg" title="${esc(a.Message||'')}">${esc(a.Message||'—')}</td>
+    <td class="cnt">${a.EventCount||1}</td>
+  </tr>`).join('');
+}
+
+// ── Timeline ─────────────────────────────────────────────────────────
+function renderTimeline(alerts) {
+  const bins = new Array(24).fill(0);
+  const now  = Date.now();
+  alerts.forEach(a => {
+    const h = Math.floor((now - new Date(a.Timestamp)) / 3600000);
+    if (h >= 0 && h < 24) bins[23 - h]++;
+  });
+  const labels = bins.map((_,i) => { const h=23-i; return h===0?'now':`-${h}h`; });
+  const gc = 'rgba(96,130,200,0.07)', tc = '#3d5070';
+
+  if (!timeChart) {
+    timeChart = new Chart(document.getElementById('timeChart'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets:[{
+          label:'Alerts', data:bins,
+          borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,0.07)',
+          borderWidth:1.5, pointRadius:0, pointHoverRadius:3,
+          fill:true, tension:0.4
+        }]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false} },
+        scales: {
+          x:{ ticks:{color:tc,font:{size:9,family:"'JetBrains Mono'"},maxTicksLimit:9,autoSkip:true}, grid:{color:gc}, border:{display:false} },
+          y:{ min:0, ticks:{color:tc,font:{size:9,family:"'JetBrains Mono'"},maxTicksLimit:4,stepSize:1}, grid:{color:gc}, border:{display:false} }
+        }
+      }
+    });
+  } else {
+    timeChart.data.labels = labels;
+    timeChart.data.datasets[0].data = bins;
+    timeChart.update('none');
+  }
+  document.getElementById('timeline-meta').textContent = `${alerts.length} events · 24 h window`;
+}
+
+// ── Categories ────────────────────────────────────────────────────────
+function renderCategories(alerts) {
+  const counts = {};
+  alerts.forEach(a => { const c = a.Category||'uncategorized'; counts[c]=(counts[c]||0)+1; });
+  const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,9);
+  const max = sorted[0]?.[1]||1;
+
+  document.getElementById('cat-meta').textContent = alerts.length + ' events sampled';
+  const el = document.getElementById('cat-list');
+  if (!el) return;
+  el.innerHTML = sorted.length ? sorted.map(([n,v],i) =>
+    `<div class="cat-row">
+      <span class="cat-name">${esc(n)}</span>
+      <div class="cat-bg"><div class="cat-fill" style="width:${Math.round(v/max*100)}%;background:${CATCOLORS[i%CATCOLORS.length]}"></div></div>
+      <span class="cat-n">${v}</span>
+    </div>`).join('') : '<div class="empty">no data</div>';
+}
+
+// ── Top IPs ───────────────────────────────────────────────────────────
+function renderTopIPs(alerts) {
+  const counts = {};
+  alerts.forEach(a => { if (a.SourceIP && a.SourceIP !== '-') counts[a.SourceIP]=(counts[a.SourceIP]||0)+1; });
+  const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,7);
+  const max = sorted[0]?.[1]||1;
+
+  const el = document.getElementById('ip-list');
+  if (!el) return;
+  el.innerHTML = sorted.length ? sorted.map(([ip,n],i) =>
+    `<div class="ip-row">
+      <span class="ip-rank">${i+1}</span>
+      <span class="ip-addr" title="${esc(ip)}">${esc(ip)}</span>
+      <div class="ip-bbar"><div class="ip-bfill" style="width:${Math.round(n/max*100)}%"></div></div>
+      <span class="ip-n">${n}</span>
+    </div>`).join('') : '<div class="empty">no IP data</div>';
+}
+
+// ── Top Rules ─────────────────────────────────────────────────────────
+function renderTopRules(alerts) {
+  const counts = {};
+  alerts.forEach(a => { const r = a.RuleName||'Unknown'; counts[r]=(counts[r]||0)+1; });
+  const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,9);
+
+  const el = document.getElementById('rules-list');
+  if (!el) return;
+  el.innerHTML = sorted.length ? sorted.map(([n,v]) =>
+    `<div class="rule-row">
+      <span class="rule-name">${esc(n)}</span>
+      <span class="rule-n">${v}</span>
+    </div>`).join('') : '<div class="empty">no data</div>';
+}
+
+// ── SSE live log stream ───────────────────────────────────────────────
+const MAX_LINES = 400;
+
+function logClass(line) {
+  const l = line.toLowerCase();
+  if (l.includes('failed') || l.includes('[ufw block]') || l.includes('error') || l.includes('invalid user')) return 'e';
+  if (l.includes('warn')   || l.includes('disconnect')  || l.includes('refused')) return 'w';
+  if (l.includes('accepted') || l.includes('session opened'))  return 's';
+  if (l.includes('[ufw allow]') || l.includes('started'))      return 'i';
+  return '';
+}
+
+function connectSSE() {
+  const es = new EventSource('/stream/logs');
+  es.onmessage = e => {
+    logLines.push(e.data);
+    if (logLines.length > MAX_LINES) logLines.shift();
+    filterLogs();
+  };
+  es.onerror = () => { es.close(); setTimeout(connectSSE, 3000); };
+}
+
+function filterLogs() {
+  const q   = (document.getElementById('log-filter')?.value||'').toLowerCase();
+  const box = document.getElementById('log-box');
+  if (!box) return;
+  const visible = q ? logLines.filter(l => l.toLowerCase().includes(q)) : logLines;
+  box.innerHTML = visible.map(l =>
+    `<div class="ll ${logClass(l)}">${esc(l)}</div>`
+  ).join('');
+  if (autoScroll) box.scrollTop = box.scrollHeight;
+}
+
+function clearLogs()  { logLines = []; filterLogs(); }
+function toggleAutoScroll() {
+  autoScroll = !autoScroll;
+  const btn = document.getElementById('ascroll-btn');
+  if (btn) { btn.textContent = 'auto-scroll ' + (autoScroll?'on':'off'); btn.className = 'log-btn'+(autoScroll?' on':''); }
+}
+
+// ── Orchestrate ───────────────────────────────────────────────────────
+async function refreshAll() {
+  await Promise.all([refreshCards(), refreshAlerts()]);
+}
+
+refreshAll();
+connectSSE();
+
+setInterval(refreshCards, 10000);   // counts every 10 s
+setInterval(refreshAlerts, 15000);  // chart/table data every 15 s
+</script>
 </body>
 </html>
-
-<script>
-    const logBox = document.getElementById("logs");
-    const alertsBody = document.getElementById("alerts-body");
-    
-    //Log Count
-    const totalLogsEl = document.getElementById("total-logs");
-    let logCount = 0;
-
-    //SSE
-    const evtSource = new EventSource("/stream/logs");
-
-    evtSource.onmessage = function(event) {
-        const line = document.createElement("p");
-        line.textContent = event.data;
-        logBox.appendChild(line);
-        logBox.scrollTop = logBox.scrollHeight;
-
-        // Increment log counter
-        logCount++;
-        totalLogsEl.textContent = logCount;
-    };
-
-
-    // ===== ALERT POLLING =====
-    async function fetchAlerts() {
-        try {
-            const res = await fetch("/alerts/recent?limit=5")
-            const alerts = await res.json();
-
-            // Clear table
-            alertsBody.innerHTML = "";
-
-            alerts.forEach(alert => {
-                const row = document.createElement("tr");
-
-                // Format time (optional improvement)
-                const d = new Date(alert.Timestamp);
-                const time = d.toLocaleDateString() + " " + d.toLocaleTimeString();
-
-                row.innerHTML = `
-                    <td>${time}</td>
-                    <td>${alert.RuleName}</td>
-                    <td>${alert.SourceIP}</td>
-                    <td class="${alert.Severity.toLowerCase()}">${alert.Severity}</td>
-                    <td>${alert.EventCount}</td>
-                `;
-
-                alertsBody.appendChild(row);
-            });
-
-        } catch (err) {
-            console.error("Failed to fetch alerts:", err);
-        }
-    }
-
-
-    const alertCountEl = document.getElementById("alert-count");
-
-    async function fetchAlertCount() {
-        try {
-            const res = await fetch("/alerts/count");
-            const data = await res.json();
-
-            alertCountEl.textContent = data.count;
-
-        } catch (err) {
-            console.error("Failed to fetch alert count:", err);
-        }
-    }
-
-    const highCountEl = document.getElementById("high-count");
-
-    async function fetchHighSeverityCount() {
-        try {
-            const res = await fetch("/alerts/severity-count?severity=HIGH");
-            const data = await res.json();
-
-            highCountEl.textContent = data.count;
-
-        } catch (err) {
-            console.error("Failed to fetch high severity count:", err);
-        }
-    }
-
-    const uniqueIpEl = document.getElementById("unique-ip-count");
-
-    async function fetchUniqueIPs() {
-        try {
-            const res = await fetch("/alerts/unique-ips");
-            const data = await res.json();
-
-            uniqueIpEl.textContent = data.count;
-
-        } catch (err) {
-            console.error("Failed to fetch unique IP count:", err);
-        }
-    }
-
-    
-    // Run immediately
-    fetchAlerts();
-    fetchAlertCount();
-    fetchHighSeverityCount();
-    fetchUniqueIPs();
-
-    // Poll every 3 seconds
-    setInterval(fetchAlerts, 3000);
-    setInterval(fetchAlertCount, 5000);
-    setInterval(fetchHighSeverityCount, 5000);
-    setInterval(fetchUniqueIPs, 5000);
-</script>

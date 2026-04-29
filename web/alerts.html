@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>IDS — Alerts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090f;--surface:#0c1220;--surface-2:#101928;--surface-3:#15213a;
+  --border:rgba(96,130,200,0.1);--border-2:rgba(96,130,200,0.2);
+  --text:#dde4f0;--text-2:#7a8cad;--text-3:#3d5070;
+  --accent:#38bdf8;--accent-dim:rgba(56,189,248,0.1);
+  --red:#f87171;--red-dim:rgba(248,113,113,0.1);
+  --orange:#fb923c;--orange-dim:rgba(251,146,60,0.1);
+  --amber:#fbbf24;--amber-dim:rgba(251,191,36,0.1);
+  --green:#34d399;--green-dim:rgba(52,211,153,0.1);
+  --sidebar-w:224px;--font-ui:'IBM Plex Sans',sans-serif;--font-mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%}
+body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size:13px;line-height:1.5;display:flex}
+.sidebar{width:var(--sidebar-w);min-height:100vh;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;position:fixed;top:0;left:0;bottom:0;z-index:10;overflow-y:auto;scrollbar-width:none}
+.sidebar::-webkit-scrollbar{display:none}
+.sidebar-brand{padding:16px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);flex-shrink:0}
+.brand-icon{width:30px;height:30px;background:var(--accent-dim);border:1px solid rgba(56,189,248,0.25);border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.brand-icon svg{width:15px;height:15px}
+.brand-name{font-size:13px;font-weight:500;color:var(--text)}
+.brand-ver{font-size:10px;color:var(--text-3);font-family:var(--font-mono);margin-top:1px}
+.nav-section{padding:10px 0 4px}
+.nav-label{font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);padding:4px 14px 5px;font-weight:500}
+.nav-item{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;color:var(--text-2);text-decoration:none;cursor:pointer;transition:color .12s,background .12s;position:relative;white-space:nowrap}
+.nav-item:hover{color:var(--text);background:rgba(96,130,200,0.05)}
+.nav-item.active{color:var(--accent);background:var(--accent-dim)}
+.nav-item.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent);border-radius:0 2px 2px 0}
+.nav-item svg{width:13px;height:13px;flex-shrink:0}
+.nav-badge{margin-left:auto;font-size:9px;font-family:var(--font-mono);background:var(--red-dim);color:var(--red);padding:1px 6px;border-radius:8px;flex-shrink:0}
+.nav-chip{margin-left:auto;font-size:9px;font-family:var(--font-mono);color:var(--text-3);padding:1px 5px;border:1px solid var(--border);border-radius:4px}
+.sidebar-footer{margin-top:auto;padding:11px 14px;border-top:1px solid var(--border);flex-shrink:0}
+.footer-status{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.footer-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);animation:blink 2.4s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.footer-txt{font-size:11px;color:var(--text-2);font-family:var(--font-mono)}
+.footer-time{font-size:10px;color:var(--text-3);font-family:var(--font-mono)}
+.main{margin-left:var(--sidebar-w);flex:1;min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+.topbar{height:50px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;position:sticky;top:0;z-index:5}
+.topbar-crumb{font-size:13px;font-weight:500;color:var(--text)}
+.topbar-sep{color:var(--text-3)}
+.topbar-page{font-size:12px;color:var(--text-3);font-family:var(--font-mono)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.topbar-clock{font-size:11px;color:var(--text-3);font-family:var(--font-mono)}
+.page{padding:18px 20px 36px;flex:1}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.filter-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.f-input{background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:6px 10px;outline:none;transition:border-color .2s;min-width:190px;flex:1;max-width:280px}
+.f-input:focus{border-color:var(--accent)}
+.f-input::placeholder{color:var(--text-3)}
+.f-select{background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--text-2);font-family:var(--font-mono);font-size:11px;padding:6px 8px;outline:none;cursor:pointer;transition:border-color .2s}
+.f-select:focus{border-color:var(--accent)}
+.f-btn{background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text-2);font-family:var(--font-mono);font-size:11px;padding:6px 11px;cursor:pointer;transition:color .12s,border-color .12s;white-space:nowrap}
+.f-btn:hover{color:var(--text);border-color:var(--border-2)}
+.f-btn.accent{color:var(--accent);border-color:rgba(56,189,248,0.3)}
+.f-btn.accent:hover{background:var(--accent-dim)}
+.stats-row{display:flex;align-items:center;margin-bottom:8px}
+.stats-txt{font-size:11px;color:var(--text-3);font-family:var(--font-mono)}
+.stats-txt strong{color:var(--text-2)}
+.tbl-wrap{overflow-x:auto;margin:0 -16px;padding:0 16px}
+.atbl{width:100%;border-collapse:collapse;font-size:11px;min-width:760px}
+.atbl th{text-align:left;padding:0 10px 8px 0;font-size:9px;font-weight:500;color:var(--text-3);letter-spacing:0.09em;text-transform:uppercase;border-bottom:1px solid var(--border);white-space:nowrap;user-select:none}
+.atbl th.sort{cursor:pointer}
+.atbl th.sort:hover{color:var(--text-2)}
+.atbl th.sort-on{color:var(--accent)}
+.si{margin-left:3px;font-size:8px;color:var(--accent)}
+.atbl td{padding:7px 10px 7px 0;border-bottom:1px solid var(--border);color:var(--text-2);vertical-align:middle}
+.atbl tr:last-child td{border-bottom:none}
+.atbl tr:hover td{color:var(--text);background:rgba(56,189,248,0.025)}
+.mono{font-family:var(--font-mono);font-size:10px}
+.rule-cell{color:var(--text);font-size:11px}
+.cat-tag{font-size:9px;padding:2px 6px;border-radius:3px;background:var(--surface-3);color:var(--text-3);font-family:var(--font-mono)}
+.msg-cell{max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;color:var(--text-3)}
+.cnt-cell{text-align:right;font-family:var(--font-mono);font-weight:500;color:var(--text)}
+.ip-link{font-family:var(--font-mono);font-size:10px;color:var(--accent);text-decoration:none}
+.ip-link:hover{text-decoration:underline}
+.empty-row td{text-align:center;padding:28px;color:var(--text-3);font-family:var(--font-mono);font-size:11px;border-bottom:none}
+.pill{display:inline-block;font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:3px;font-weight:500;letter-spacing:0.05em}
+.pill-critical{background:var(--red-dim);color:var(--red)}
+.pill-high{background:var(--orange-dim);color:var(--orange)}
+.pill-medium{background:var(--amber-dim);color:var(--amber)}
+.pill-low{background:var(--green-dim);color:var(--green)}
+.pager{display:flex;align-items:center;justify-content:space-between;margin-top:12px;flex-wrap:wrap;gap:8px}
+.pager-info{font-size:10px;color:var(--text-3);font-family:var(--font-mono)}
+.pager-btns{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.pg-btn{background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text-2);font-family:var(--font-mono);font-size:10px;padding:4px 9px;cursor:pointer;transition:color .12s,border-color .12s;min-width:28px;text-align:center}
+.pg-btn:hover:not(:disabled){color:var(--text);border-color:var(--border-2)}
+.pg-btn.active{color:var(--accent);border-color:rgba(56,189,248,0.4);background:var(--accent-dim)}
+.pg-btn:disabled{opacity:.35;cursor:default}
+.pg-gap{font-size:10px;color:var(--text-3);font-family:var(--font-mono);padding:0 3px}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:2px}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"><path d="M12 2L3 7v5c0 5 4 9.3 9 10.5C17 21.3 21 17 21 12V7z"/></svg></div>
+    <div><div class="brand-name">Log-IDS</div><div class="brand-ver">v0.1.0 · :8888</div></div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Overview</div>
+    <a href="/" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </a>
+    <a href="/alerts.html" class="nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Alerts
+      <span class="nav-badge" id="nav-crit">—</span>
+    </a>
+    <a href="/live" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 010 8.49M7.76 16.24a6 6 0 010-8.49M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>
+      Live Logs
+    </a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Investigation</div>
+    <a href="/ip-profile.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>IP Profile</a>
+    <a href="/alert-detail.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Alert Detail</a>
+    <a href="/brute-force.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Brute Force</a>
+    <a href="/timeline.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>Attack Timeline</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">System</div>
+    <a href="/rules.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Rules Manager</a>
+    <a href="/sources.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 22V4a2 2 0 012-2h12a2 2 0 012 2v18"/><path d="M2 22h20"/><rect x="8" y="6" width="8" height="4"/></svg>Log Sources</a>
+    <a href="/reports.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Reports</a>
+    <a href="/settings.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>Settings</a>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="footer-status">
+      <div class="footer-dot"></div>
+      <span class="footer-txt">system online</span>
+    </div>
+    <div class="footer-time" id="footer-time">--:--:-- UTC</div>
+  </div>
+</nav>
+  <div class="sidebar-footer">
+    <div class="footer-status"><div class="footer-dot"></div><span class="footer-txt">system online</span></div>
+    <div class="footer-time" id="footer-time">--:--:-- UTC</div>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-crumb">Log-IDS</span><span class="topbar-sep"> / </span><span class="topbar-page">alerts</span>
+    <div class="topbar-right"><span class="topbar-clock" id="topbar-clock">--:--:--</span></div>
+  </div>
+  <div class="page">
+
+    <div class="filter-bar">
+      <input class="f-input" id="f-text" type="text" placeholder="search rule, IP, user, message…" oninput="onFilter()">
+      <select class="f-select" id="f-sev" onchange="onFilter()">
+        <option value="">All severities</option>
+        <option value="CRITICAL">Critical</option>
+        <option value="HIGH">High</option>
+        <option value="MEDIUM">Medium</option>
+        <option value="LOW">Low</option>
+      </select>
+      <select class="f-select" id="f-cat" onchange="onFilter()"><option value="">All categories</option></select>
+      <button class="f-btn" onclick="clearFilters()">✕ clear</button>
+      <button class="f-btn accent" style="margin-left:auto" onclick="exportCSV()">↓ export CSV</button>
+    </div>
+
+    <div class="stats-row"><span class="stats-txt" id="stats-txt">loading…</span></div>
+
+    <div class="panel">
+      <div class="tbl-wrap">
+        <table class="atbl">
+          <thead><tr>
+            <th class="sort" style="width:90px"  onclick="sortBy('Timestamp')">Time<span class="si" id="si-Timestamp"></span></th>
+            <th class="sort" style="width:80px"  onclick="sortBy('Severity')">Severity<span class="si" id="si-Severity"></span></th>
+            <th class="sort"                     onclick="sortBy('RuleName')">Rule<span class="si" id="si-RuleName"></span></th>
+            <th style="width:106px">Category</th>
+            <th style="width:130px">Source IP</th>
+            <th style="width:80px">User</th>
+            <th>Message</th>
+            <th class="sort" style="width:52px;text-align:right" onclick="sortBy('EventCount')">Count<span class="si" id="si-EventCount"></span></th>
+          </tr></thead>
+          <tbody id="tbody"><tr><td colspan="8" style="text-align:center;padding:28px;color:var(--text-3);font-family:var(--font-mono);font-size:11px">loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="pager" id="pager"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let ALL=[], filtered=[], page=1;
+const PER=25;
+let sortCol='Timestamp', sortDir='desc';
+
+const tick=()=>{const s=new Date().toUTCString().slice(17,25)+' UTC';document.getElementById('topbar-clock').textContent=s;document.getElementById('footer-time').textContent=s};
+setInterval(tick,1000);tick();
+
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const pill=sev=>`<span class="pill pill-${(sev||'low').toLowerCase()}">${esc(sev)}</span>`;
+const fmtTime=ts=>{const d=new Date(ts);return isNaN(d)?'—':d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour12:false})};
+
+async function load(){
+  try{const r=await fetch('/alerts?limit=2000');ALL=r.ok?(await r.json()??[]):[];}catch{ALL=[];}
+  const cats=[...new Set(ALL.map(a=>a.Category).filter(Boolean))].sort();
+  const sel=document.getElementById('f-cat');
+  cats.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);});
+  const crit=ALL.filter(a=>a.Severity==='CRITICAL').length;
+  const nb=document.getElementById('nav-crit');if(nb)nb.textContent=crit||'—';
+  applyFilters();
+}
+
+function onFilter(){page=1;applyFilters();}
+function applyFilters(){
+  const q=document.getElementById('f-text').value.toLowerCase();
+  const sev=document.getElementById('f-sev').value;
+  const cat=document.getElementById('f-cat').value;
+  filtered=ALL.filter(a=>{
+    if(sev&&a.Severity!==sev)return false;
+    if(cat&&a.Category!==cat)return false;
+    if(q){const hay=[a.RuleName,a.SourceIP,a.Username,a.Message,a.Category].join(' ').toLowerCase();if(!hay.includes(q))return false;}
+    return true;
+  });
+  applySort();
+}
+function clearFilters(){document.getElementById('f-text').value='';document.getElementById('f-sev').value='';document.getElementById('f-cat').value='';onFilter();}
+
+const SEV_ORD={CRITICAL:4,HIGH:3,MEDIUM:2,LOW:1};
+function sortBy(col){
+  if(sortCol===col)sortDir=sortDir==='asc'?'desc':'asc';
+  else{sortCol=col;sortDir=(col==='Timestamp'||col==='EventCount')?'desc':'asc';}
+  page=1;applySort();
+}
+function applySort(){
+  filtered.sort((a,b)=>{
+    let va=a[sortCol]??'',vb=b[sortCol]??'';
+    if(sortCol==='Timestamp'){va=new Date(va);vb=new Date(vb);}
+    if(sortCol==='Severity'){va=SEV_ORD[va]||0;vb=SEV_ORD[vb]||0;}
+    if(sortCol==='EventCount'){va=+va;vb=+vb;}
+    if(va<vb)return sortDir==='asc'?-1:1;
+    if(va>vb)return sortDir==='asc'?1:-1;
+    return 0;
+  });
+  ['Timestamp','Severity','RuleName','EventCount'].forEach(c=>{const el=document.getElementById('si-'+c);if(el)el.textContent=sortCol===c?(sortDir==='asc'?'▲':'▼'):'';});
+  ['Timestamp','Severity','RuleName','EventCount'].forEach(c=>{
+    const th=document.querySelector(`th[onclick="sortBy('${c}')"]`);
+    if(th){th.classList.toggle('sort-on',sortCol===c);}
+  });
+  renderTable();renderPager();renderStats();
+}
+
+function renderTable(){
+  const tbody=document.getElementById('tbody');
+  const slice=filtered.slice((page-1)*PER,page*PER);
+  if(!slice.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--text-3);font-family:var(--font-mono);font-size:11px;border-bottom:none">no alerts match the current filter</td></tr>';return;}
+  tbody.innerHTML=slice.map(a=>{
+    const ip=a.SourceIP&&a.SourceIP!=='-'&&a.SourceIP!==''
+      ?`<a class="ip-link" href="/ip-profile.html?ip=${encodeURIComponent(a.SourceIP)}">${esc(a.SourceIP)}</a>`
+      :`<span class="mono">${esc(a.SourceIP||'—')}</span>`;
+    return`<tr>
+      <td class="mono">${fmtTime(a.Timestamp)}</td>
+      <td>${pill(a.Severity)}</td>
+      <td class="rule-cell">${esc(a.RuleName||'—')}</td>
+      <td><span class="cat-tag">${esc(a.Category||'—')}</span></td>
+      <td>${ip}</td>
+      <td class="mono">${esc(a.Username||'—')}</td>
+      <td class="msg-cell" title="${esc(a.Message||'')}">${esc(a.Message||'—')}</td>
+      <td class="cnt-cell">${a.EventCount||1}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderStats(){
+  const el=document.getElementById('stats-txt');
+  if(!el)return;
+  const s=(page-1)*PER+1,e=Math.min(page*PER,filtered.length);
+  el.innerHTML=`Showing <strong>${filtered.length?s+'–'+e:0}</strong> of <strong>${filtered.length}</strong> alerts <span style="color:var(--text-3)">(${ALL.length} total)</span>`;
+}
+
+function renderPager(){
+  const total=Math.ceil(filtered.length/PER);
+  const el=document.getElementById('pager');
+  if(!el)return;
+  if(total<=1){el.innerHTML='';return;}
+  let pages=[];
+  if(total<=7){for(let i=1;i<=total;i++)pages.push(i);}
+  else{
+    pages=[1];
+    if(page>3)pages.push('…');
+    for(let i=Math.max(2,page-1);i<=Math.min(total-1,page+1);i++)pages.push(i);
+    if(page<total-2)pages.push('…');
+    pages.push(total);
+  }
+  el.innerHTML=`<span class="pager-info">Page ${page} of ${total}</span>
+    <div class="pager-btns">
+      <button class="pg-btn" onclick="goPage(${page-1})" ${page===1?'disabled':''}>‹ prev</button>
+      ${pages.map(p=>p==='…'?`<span class="pg-gap">…</span>`:`<button class="pg-btn ${p===page?'active':''}" onclick="goPage(${p})">${p}</button>`).join('')}
+      <button class="pg-btn" onclick="goPage(${page+1})" ${page===total?'disabled':''}>next ›</button>
+    </div>`;
+}
+function goPage(p){
+  const total=Math.ceil(filtered.length/PER);
+  page=Math.max(1,Math.min(p,total));
+  renderTable();renderPager();renderStats();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function exportCSV(){
+  const headers=['Timestamp','Severity','RuleName','Category','SourceIP','Username','Message','EventCount'];
+  const rows=filtered.map(a=>headers.map(h=>`"${String(a[h]??'').replace(/"/g,'""')}"`).join(','));
+  const csv=[headers.join(','),...rows].join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='ids-alerts-'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+
+load();
+setInterval(()=>{load();},30000);
+</script>
+</body>
+</html>

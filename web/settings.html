@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>IDS — Settings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090f;--surface:#0c1220;--surface-2:#101928;--surface-3:#15213a;
+  --border:rgba(96,130,200,0.1);--border-2:rgba(96,130,200,0.2);
+  --text:#dde4f0;--text-2:#7a8cad;--text-3:#3d5070;
+  --accent:#38bdf8;--accent-dim:rgba(56,189,248,0.1);
+  --red:#f87171;--red-dim:rgba(248,113,113,0.1);
+  --orange:#fb923c;--orange-dim:rgba(251,146,60,0.1);
+  --amber:#fbbf24;--amber-dim:rgba(251,191,36,0.1);
+  --green:#34d399;--green-dim:rgba(52,211,153,0.1);
+  --purple:#a78bfa;--purple-dim:rgba(167,139,250,0.1);
+  --sidebar-w:224px;--font-ui:'IBM Plex Sans',sans-serif;--font-mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%}
+body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size:13px;line-height:1.5;display:flex}
+
+/* ── Sidebar ────────────────────────────────────────────────────── */
+.sidebar{width:var(--sidebar-w);min-height:100vh;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;position:fixed;top:0;left:0;bottom:0;z-index:10;overflow-y:auto;scrollbar-width:none}
+.sidebar::-webkit-scrollbar{display:none}
+.sidebar-brand{padding:16px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);flex-shrink:0}
+.brand-icon{width:30px;height:30px;background:var(--accent-dim);border:1px solid rgba(56,189,248,0.25);border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.brand-icon svg{width:15px;height:15px}
+.brand-name{font-size:13px;font-weight:500;color:var(--text)}
+.brand-ver{font-size:10px;color:var(--text-3);font-family:var(--font-mono);margin-top:1px}
+.nav-section{padding:10px 0 4px}
+.nav-label{font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);padding:4px 14px 5px;font-weight:500}
+.nav-item{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;color:var(--text-2);text-decoration:none;cursor:pointer;transition:color .12s,background .12s;position:relative;white-space:nowrap}
+.nav-item:hover{color:var(--text);background:rgba(96,130,200,0.05)}
+.nav-item.active{color:var(--accent);background:var(--accent-dim)}
+.nav-item.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent);border-radius:0 2px 2px 0}
+.nav-item svg{width:13px;height:13px;flex-shrink:0}
+.nav-badge{margin-left:auto;font-size:9px;font-family:var(--font-mono);background:var(--red-dim);color:var(--red);padding:1px 6px;border-radius:8px;flex-shrink:0}
+.sidebar-footer{margin-top:auto;padding:11px 14px;border-top:1px solid var(--border);flex-shrink:0}
+.footer-status{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.footer-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);animation:blink 2.4s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.footer-txt{font-size:11px;color:var(--text-2);font-family:var(--font-mono)}
+.footer-time{font-size:10px;color:var(--text-3);font-family:var(--font-mono)}
+
+/* ── Main ───────────────────────────────────────────────────────── */
+.main{margin-left:var(--sidebar-w);flex:1;min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+.topbar{height:50px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;position:sticky;top:0;z-index:5}
+.topbar-crumb{font-size:13px;font-weight:500;color:var(--text)}
+.topbar-sep{color:var(--text-3)}
+.topbar-page{font-size:12px;color:var(--text-3);font-family:var(--font-mono)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.topbar-clock{font-size:11px;color:var(--text-3);font-family:var(--font-mono)}
+
+/* ── Layout ─────────────────────────────────────────────────────── */
+.page{padding:18px 20px 60px;flex:1;display:flex;gap:20px;align-items:flex-start}
+.settings-nav{width:160px;flex-shrink:0;position:sticky;top:68px}
+.settings-nav-item{display:block;padding:6px 10px;font-size:12px;color:var(--text-3);text-decoration:none;border-radius:5px;margin-bottom:2px;cursor:pointer;transition:color .12s,background .12s;border:none;background:none;width:100%;text-align:left}
+.settings-nav-item:hover{color:var(--text-2);background:rgba(96,130,200,0.04)}
+.settings-nav-item.active{color:var(--accent);background:var(--accent-dim)}
+.settings-body{flex:1;min-width:0;max-width:680px;display:flex;flex-direction:column;gap:6px}
+
+/* ── Section ────────────────────────────────────────────────────── */
+.section{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.section-head{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border)}
+.section-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.section-icon svg{width:13px;height:13px}
+.section-title{font-size:13px;font-weight:500;color:var(--text);flex:1}
+.section-desc{font-size:11px;color:var(--text-3);margin-top:1px}
+
+/* Backend-needed badge */
+.needs-backend{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-family:var(--font-mono);font-weight:500;padding:2px 7px;border-radius:3px;letter-spacing:.04em;background:var(--amber-dim);color:var(--amber);border:1px solid rgba(251,191,36,0.2);flex-shrink:0}
+.needs-backend svg{width:9px;height:9px}
+
+/* Frontend-only badge */
+.local-badge{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-family:var(--font-mono);font-weight:500;padding:2px 7px;border-radius:3px;letter-spacing:.04em;background:var(--green-dim);color:var(--green);border:1px solid rgba(52,211,153,0.2);flex-shrink:0}
+
+/* ── Setting row ─────────────────────────────────────────────────── */
+.setting-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 18px;border-bottom:1px solid var(--border)}
+.setting-row:last-child{border-bottom:none}
+.setting-row.disabled{opacity:.45;pointer-events:none}
+.setting-info{flex:1;min-width:0}
+.setting-label{font-size:12px;font-weight:500;color:var(--text);margin-bottom:2px}
+.setting-hint{font-size:11px;color:var(--text-3);line-height:1.45}
+.setting-hint code{font-family:var(--font-mono);font-size:10px;background:var(--surface-3);padding:1px 5px;border-radius:3px;color:var(--text-2)}
+.setting-control{flex-shrink:0;display:flex;align-items:center;gap:8px}
+
+/* ── Controls ───────────────────────────────────────────────────── */
+.s-select{background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:5px 8px;outline:none;cursor:pointer;min-width:120px;transition:border-color .2s}
+.s-select:focus{border-color:var(--accent)}
+.s-input{background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:5px 9px;outline:none;width:160px;transition:border-color .2s}
+.s-input:focus{border-color:var(--accent)}
+.s-input::placeholder{color:var(--text-3)}
+.s-input-sm{width:80px}
+.s-input-xs{width:60px}
+
+/* Toggle */
+.toggle{position:relative;width:36px;height:20px;flex-shrink:0;cursor:pointer}
+.toggle input{opacity:0;width:0;height:0;position:absolute}
+.toggle-track{position:absolute;inset:0;background:var(--surface-3);border-radius:20px;border:1px solid var(--border-2);transition:background .2s,border-color .2s}
+.toggle input:checked+.toggle-track{background:var(--accent-dim);border-color:rgba(56,189,248,.4)}
+.toggle-thumb{position:absolute;top:3px;left:3px;width:12px;height:12px;background:var(--text-3);border-radius:50%;transition:transform .2s,background .2s}
+.toggle input:checked~.toggle-thumb{transform:translateX(16px);background:var(--accent)}
+
+/* Range */
+.s-range{-webkit-appearance:none;appearance:none;height:3px;background:var(--surface-3);border-radius:2px;outline:none;cursor:pointer;width:120px}
+.s-range::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--surface)}
+.range-val{font-family:var(--font-mono);font-size:11px;color:var(--text-2);min-width:36px;text-align:right}
+
+/* Save indicator */
+.save-dot{width:6px;height:6px;border-radius:50%;background:var(--green);opacity:0;transition:opacity .3s}
+.save-dot.show{opacity:1}
+
+/* Action buttons */
+.act-btn{background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text-2);font-family:var(--font-mono);font-size:11px;padding:6px 12px;cursor:pointer;transition:color .12s,border-color .12s;white-space:nowrap}
+.act-btn:hover{color:var(--text);border-color:var(--border-2)}
+.act-btn.primary{color:var(--accent);border-color:rgba(56,189,248,.3)}
+.act-btn.primary:hover{background:var(--accent-dim)}
+.act-btn.danger{color:var(--red);border-color:rgba(248,113,113,.25)}
+.act-btn.danger:hover{background:var(--red-dim)}
+.act-btn.warn{color:var(--amber);border-color:rgba(251,191,36,.25)}
+.act-btn.warn:hover{background:var(--amber-dim)}
+
+/* System info grid */
+.info-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:0}
+.info-cell{padding:13px 18px;border-bottom:1px solid var(--border);border-right:1px solid var(--border)}
+.info-cell:nth-child(even){border-right:none}
+.info-cell:nth-last-child(-n+2){border-bottom:none}
+.info-lbl{font-size:9px;color:var(--text-3);letter-spacing:.08em;text-transform:uppercase;font-weight:500;margin-bottom:5px}
+.info-val{font-size:12px;font-family:var(--font-mono);color:var(--text)}
+.info-val.loading{color:var(--text-3)}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--surface-2);border:1px solid var(--border-2);border-radius:7px;padding:10px 16px;font-size:12px;font-family:var(--font-mono);color:var(--text);box-shadow:0 4px 20px rgba(0,0,0,.4);z-index:100;display:flex;align-items:center;gap:8px;transform:translateY(60px);opacity:0;transition:transform .25s,opacity .25s;pointer-events:none}
+.toast.show{transform:translateY(0);opacity:1}
+.toast-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+
+/* Danger zone */
+.danger-zone{border-color:rgba(248,113,113,.15)}
+.danger-zone .section-head{border-bottom-color:rgba(248,113,113,.15)}
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- ── Sidebar ─────────────────────────────────────────────────── -->
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"><path d="M12 2L3 7v5c0 5 4 9.3 9 10.5C17 21.3 21 17 21 12V7z"/></svg></div>
+    <div><div class="brand-name">Log-IDS</div><div class="brand-ver">v0.1.0 · :8888</div></div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Overview</div>
+    <a href="/" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Dashboard</a>
+    <a href="/alerts.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Alerts<span class="nav-badge" id="nav-crit">—</span></a>
+    <a href="/live.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 010 8.49M7.76 16.24a6 6 0 010-8.49M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>Live Logs</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Investigation</div>
+    <a href="/ip-profile.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>IP Profile</a>
+    <a href="/alert-detail.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Alert Detail</a>
+    <a href="/brute-force.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Brute Force</a>
+    <a href="/timeline.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>Attack Timeline</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">System</div>
+    <a href="/rules.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Rules Manager</a>
+    <a href="/sources.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 22V4a2 2 0 012-2h12a2 2 0 012 2v18"/><path d="M2 22h20"/><rect x="8" y="6" width="8" height="4"/></svg>Log Sources</a>
+    <a href="/reports.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Reports</a>
+    <a href="/settings.html" class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>Settings</a>
+  </div>
+  <div class="sidebar-footer">
+    <div class="footer-status"><div class="footer-dot"></div><span class="footer-txt">system online</span></div>
+    <div class="footer-time" id="footer-time">--:--:-- UTC</div>
+  </div>
+</nav>
+
+<!-- ── Main ───────────────────────────────────────────────────────── -->
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-crumb">Log-IDS</span>
+    <span class="topbar-sep">/</span>
+    <span class="topbar-page">settings</span>
+    <div class="topbar-right">
+      <span class="topbar-clock" id="topbar-clock">--:--:--</span>
+    </div>
+  </div>
+
+  <div class="page">
+
+    <!-- Left nav -->
+    <div class="settings-nav">
+      <button class="settings-nav-item active" onclick="scrollTo('s-system')">System</button>
+      <button class="settings-nav-item" onclick="scrollTo('s-dashboard')">Dashboard</button>
+      <button class="settings-nav-item" onclick="scrollTo('s-alerts')">Alerts</button>
+      <button class="settings-nav-item" onclick="scrollTo('s-livelogs')">Live Logs</button>
+      <button class="settings-nav-item" onclick="scrollTo('s-notifications')">Notifications</button>
+      <button class="settings-nav-item" onclick="scrollTo('s-retention')">Retention</button>
+      <button class="settings-nav-item" onclick="scrollTo('s-danger')">Danger Zone</button>
+    </div>
+
+    <!-- Settings body -->
+    <div class="settings-body">
+
+      <!-- ── System info ──────────────────────────────────────────── -->
+      <div class="section" id="s-system">
+        <div class="section-head">
+          <div class="section-icon" style="background:var(--accent-dim)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <div>
+            <div class="section-title">System</div>
+            <div class="section-desc">Read-only system information and status</div>
+          </div>
+        </div>
+        <div class="info-grid">
+          <div class="info-cell"><div class="info-lbl">Server address</div><div class="info-val" id="inf-addr">:8888</div></div>
+          <div class="info-cell"><div class="info-lbl">Total alerts</div><div class="info-val loading" id="inf-total">—</div></div>
+          <div class="info-cell"><div class="info-lbl">Unique attacker IPs</div><div class="info-val loading" id="inf-ips">—</div></div>
+          <div class="info-cell"><div class="info-lbl">Critical alerts</div><div class="info-val loading" id="inf-crit">—</div></div>
+          <div class="info-cell"><div class="info-lbl">Watch sources</div><div class="info-val">6 files</div></div>
+          <div class="info-cell"><div class="info-lbl">Detection rules</div><div class="info-val">40 active</div></div>
+          <div class="info-cell"><div class="info-lbl">DB path</div><div class="info-val">data/ids.db</div></div>
+          <div class="info-cell"><div class="info-lbl">Settings storage</div><div class="info-val">localStorage</div></div>
+        </div>
+      </div>
+
+      <!-- ── Dashboard ────────────────────────────────────────────── -->
+      <div class="section" id="s-dashboard">
+        <div class="section-head">
+          <div class="section-icon" style="background:var(--purple-dim)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          </div>
+          <div>
+            <div class="section-title">Dashboard</div>
+            <div class="section-desc">Refresh rates and display preferences</div>
+          </div>
+          <span class="local-badge">localStorage</span>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Metric card refresh</div>
+            <div class="setting-hint">How often the summary cards (total alerts, severity counts) poll <code>/alerts/count</code></div>
+          </div>
+          <div class="setting-control">
+            <select class="s-select" id="cfg-card-refresh" onchange="save('card-refresh',this.value)">
+              <option value="5000">5 seconds</option>
+              <option value="10000">10 seconds</option>
+              <option value="30000">30 seconds</option>
+              <option value="60000">1 minute</option>
+            </select>
+            <div class="save-dot" id="dot-card-refresh"></div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Chart & table refresh</div>
+            <div class="setting-hint">How often the timeline, top IPs, categories, and alert table poll <code>/alerts/recent</code></div>
+          </div>
+          <div class="setting-control">
+            <select class="s-select" id="cfg-chart-refresh" onchange="save('chart-refresh',this.value)">
+              <option value="10000">10 seconds</option>
+              <option value="15000">15 seconds</option>
+              <option value="30000">30 seconds</option>
+              <option value="60000">1 minute</option>
+            </select>
+            <div class="save-dot" id="dot-chart-refresh"></div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Recent alerts table rows</div>
+            <div class="setting-hint">Number of rows shown in the dashboard Recent Alerts panel</div>
+          </div>
+          <div class="setting-control">
+            <select class="s-select" id="cfg-dash-rows" onchange="save('dash-rows',this.value)">
+              <option value="5">5 rows</option>
+              <option value="10">10 rows</option>
+              <option value="12">12 rows</option>
+              <option value="20">20 rows</option>
+            </select>
+            <div class="save-dot" id="dot-dash-rows"></div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Timeline bucket</div>
+            <div class="setting-hint">How the 24-hour timeline chart is grouped on the dashboard</div>
+          </div>
+          <div class="setting-control">
+            <select class="s-select" id="cfg-timeline-bucket" onchange="save('timeline-bucket',this.value)">
+              <option value="1">1 hour</option>
+              <option value="2">2 hours</option>
+              <option value="4">4 hours</option>
+            </select>
+            <div class="save-dot" id="dot-timeline-bucket"></div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Clock format</div>
+            <div class="setting-hint">Time display format across all pages</div>
+          </div>
+          <div class="setting-control">
+            <select class="s-select" id="cfg-clock-fmt" onchange="save('clock-fmt',this.value)">
+              <option value="utc">UTC 24h</option>
+              <option value="local24">Local 24h</option>
+              <option value="local12">Local 12h (AM/PM)</option>
+            </select>
+            <div class="save-dot" id="dot-clock-fmt"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Alerts page ───────────────────────────────────────────── -->
+      <div class="section" id="s-alerts">
+        <div class="section-head">
+          <div class="section-icon" style="background:var(--red-dim)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <div>
+            <div class="section-title">Alerts Page</div>
+            <div class="section-desc">Table defaults and loading behaviour</div>
+          </div>
+          <span class="local-badge">localStorage</span>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Rows per page</div>
+            <div class="setting-hint">Default pagination size on the Alerts table</div>
+          </div>
+          <div class="setting-control">
+            <select class="s-select" id="cfg-alerts-per-page" onchange="save('alerts-per-page',this.value)">
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+            <div class="save-dot" id="dot-alerts-per-page"></div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Default sort column</div>
+            <div class="setting-hint">Which column the alert table sorts by when first loaded</div>
+          </div>
+          <div class="setting-control">
+            <select class="s-select" id="cfg-alerts-sort" onchange="save('alerts-sort',this.value)">
+              <option value="Timestamp">Timestamp</option>
+              <option value="Severity">Severity</option>
+              <option value="EventCount">Event count</option>
+              <option value="RuleName">Rule name</option>
+            </select>
+            <div class="save-dot" id="dot-alerts-sort"></div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Default sort direction</div>
+            <div class="setting-hint">Ascending or descending when table loads</div>
+          </div>
+          <div class="setting-control">
+            <select class="s-select" id="cfg-alerts-dir" onchange="save('alerts-dir',this.value)">
+              <option value="desc">Descending (newest first)</option>
+              <option value="asc">Ascending (oldest first)</option>
+            </select>
+            <div class="save-dot" id="dot-alerts-dir"></div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Fetch limit</div>
+            <div class="setting-hint">How many rows to pull from <code>/alerts?limit=N</code> — higher values are more complete but slower on large databases</div>
+          </div>
+          <div class="setting-control">
+            <select class="s-select" id="cfg-alerts-limit" onchange="save('alerts-limit',this.value)">
+              <option value="500">500</option>
+              <option value="1000">1 000</option>
+              <option value="2000">2 000</option>
+              <option value="5000">5 000</option>
+            </select>
+            <div class="save-dot" id="dot-alerts-limit"></div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Auto-refresh alerts table</div>
+            <div class="setting-hint">Automatically reload the alerts table every 30 seconds</div>
+          </div>
+          <div class="setting-control">
+            <label class="toggle">
+              <input type="checkbox" id="cfg-alerts-autorefresh" onchange="save('alerts-autorefresh',this.checked)">
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+            <div class="save-dot" id="dot-alerts-autorefresh"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Live Logs ─────────────────────────────────────────────── -->
+      <div class="section" id="s-livelogs">
+        <div class="section-head">
+          <div class="section-icon" style="background:var(--green-dim)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 010 8.49M7.76 16.24a6 6 0 010-8.49M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>
+          </div>
+          <div>
+            <div class="section-title">Live Logs</div>
+            <div class="section-desc">SSE stream buffer and display defaults</div>
+          </div>
+          <span class="local-badge">localStorage</span>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Line buffer limit</div>
+            <div class="setting-hint">Maximum log lines kept in memory — older lines are dropped when this is exceeded</div>
+          </div>
+          <div class="setting-control">
+            <select class="s-select" id="cfg-log-buffer" onchange="save('log-buffer',this.value)">
+              <option value="500">500 lines</option>
+              <option value="1000">1 000 lines</option>
+              <option value="2000">2 000 lines</option>
+              <option value="5000">5 000 lines</option>
+            </select>
+            <div class="save-dot" id="dot-log-buffer"></div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Auto-scroll by default</div>
+            <div class="setting-hint">Start with auto-scroll enabled when the Live Logs page loads</div>
+          </div>
+          <div class="setting-control">
+            <label class="toggle">
+              <input type="checkbox" id="cfg-log-autoscroll" onchange="save('log-autoscroll',this.checked)">
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+            <div class="save-dot" id="dot-log-autoscroll"></div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Word wrap by default</div>
+            <div class="setting-hint">Wrap long log lines instead of horizontal scrolling</div>
+          </div>
+          <div class="setting-control">
+            <label class="toggle">
+              <input type="checkbox" id="cfg-log-wrap" onchange="save('log-wrap',this.checked)">
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+            <div class="save-dot" id="dot-log-wrap"></div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">SSE reconnect delay</div>
+            <div class="setting-hint">How long to wait before reconnecting after a stream disconnection</div>
+          </div>
+          <div class="setting-control">
+            <select class="s-select" id="cfg-log-reconnect" onchange="save('log-reconnect',this.value)">
+              <option value="2000">2 seconds</option>
+              <option value="4000">4 seconds</option>
+              <option value="8000">8 seconds</option>
+              <option value="15000">15 seconds</option>
+            </select>
+            <div class="save-dot" id="dot-log-reconnect"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Notifications ─────────────────────────────────────────── -->
+      <div class="section" id="s-notifications">
+        <div class="section-head">
+          <div class="section-icon" style="background:var(--amber-dim)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" stroke-linecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+          </div>
+          <div>
+            <div class="section-title">Notifications</div>
+            <div class="section-desc">Webhook and email alerts for high-severity events</div>
+          </div>
+          <span class="needs-backend">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            needs backend
+          </span>
+        </div>
+
+        <div class="setting-row disabled">
+          <div class="setting-info">
+            <div class="setting-label">Webhook URL</div>
+            <div class="setting-hint">POST JSON alert payload to this URL when a rule fires. Requires <code>POST /settings</code> and a <code>settings</code> table in the DB</div>
+          </div>
+          <div class="setting-control">
+            <input class="s-input" type="url" id="cfg-webhook-url" placeholder="https://hooks.example.com/…">
+          </div>
+        </div>
+
+        <div class="setting-row disabled">
+          <div class="setting-info">
+            <div class="setting-label">Notify on severity</div>
+            <div class="setting-hint">Minimum severity level that triggers a webhook or email notification</div>
+          </div>
+          <div class="setting-control">
+            <select class="s-select" id="cfg-notify-sev">
+              <option value="CRITICAL">Critical only</option>
+              <option value="HIGH">High and above</option>
+              <option value="MEDIUM">Medium and above</option>
+              <option value="LOW">All alerts</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setting-row disabled">
+          <div class="setting-info">
+            <div class="setting-label">Deduplicate window</div>
+            <div class="setting-hint">Suppress repeated webhook calls for the same rule + IP within this window</div>
+          </div>
+          <div class="setting-control">
+            <select class="s-select" id="cfg-notify-dedup">
+              <option value="60">1 minute</option>
+              <option value="300">5 minutes</option>
+              <option value="900">15 minutes</option>
+              <option value="3600">1 hour</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setting-row disabled">
+          <div class="setting-info">
+            <div class="setting-label">Test webhook</div>
+            <div class="setting-hint">Send a test payload to the configured URL to verify connectivity</div>
+          </div>
+          <div class="setting-control">
+            <button class="act-btn primary" disabled>send test →</button>
+          </div>
+        </div>
+
+        <div class="setting-row" style="background:var(--surface-2);border-top:1px solid var(--border)">
+          <div class="setting-info" style="flex:1">
+            <div style="font-size:11px;color:var(--text-3);line-height:1.5">
+              Notifications require a <code style="font-family:var(--font-mono);font-size:10px;background:var(--surface-3);padding:1px 5px;border-radius:3px;color:var(--text-2)">settings</code> table in the database and a <code style="font-family:var(--font-mono);font-size:10px;background:var(--surface-3);padding:1px 5px;border-radius:3px;color:var(--text-2)">GET / POST /settings</code> API endpoint. A background goroutine will also be needed to fire webhooks on alert insertion.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Retention ─────────────────────────────────────────────── -->
+      <div class="section" id="s-retention">
+        <div class="section-head">
+          <div class="section-icon" style="background:var(--orange-dim)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </div>
+          <div>
+            <div class="section-title">Data Retention</div>
+            <div class="section-desc">Alert database pruning and storage limits</div>
+          </div>
+          <span class="needs-backend">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            needs backend
+          </span>
+        </div>
+
+        <div class="setting-row disabled">
+          <div class="setting-info">
+            <div class="setting-label">Retention period</div>
+            <div class="setting-hint">Alerts older than this are automatically pruned. Requires a scheduled <code>DELETE FROM alerts WHERE timestamp &lt; ?</code> and a <code>POST /settings</code> endpoint to persist the value</div>
+          </div>
+          <div class="setting-control">
+            <select class="s-select" id="cfg-retention">
+              <option value="7">7 days</option>
+              <option value="14">14 days</option>
+              <option value="30">30 days</option>
+              <option value="60">60 days</option>
+              <option value="90">90 days</option>
+              <option value="0">Forever</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setting-row disabled">
+          <div class="setting-info">
+            <div class="setting-label">Max alert rows</div>
+            <div class="setting-hint">Hard cap on the number of rows in the <code>alerts</code> table — oldest alerts pruned when exceeded. Requires <code>DELETE /alerts/prune?keep=N</code></div>
+          </div>
+          <div class="setting-control">
+            <select class="s-select" id="cfg-max-rows">
+              <option value="10000">10 000</option>
+              <option value="50000">50 000</option>
+              <option value="100000">100 000</option>
+              <option value="0">No limit</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Manual prune</div>
+            <div class="setting-hint">Delete all alerts older than the selected retention period right now. Will require <code>DELETE /alerts/prune</code> endpoint to be implemented first</div>
+          </div>
+          <div class="setting-control" style="gap:10px">
+            <span id="prune-count" style="font-size:11px;color:var(--text-3);font-family:var(--font-mono)"></span>
+            <button class="act-btn warn" onclick="checkPrune()" id="btn-prune-check">check…</button>
+            <button class="act-btn danger" id="btn-prune" onclick="runPrune()" style="display:none" disabled title="Requires DELETE /alerts/prune endpoint">prune now</button>
+          </div>
+        </div>
+
+        <div class="setting-row" style="background:var(--surface-2);border-top:1px solid var(--border)">
+          <div class="setting-info" style="flex:1">
+            <div style="font-size:11px;color:var(--text-3);line-height:1.5">
+              Retention configuration requires a <code style="font-family:var(--font-mono);font-size:10px;background:var(--surface-3);padding:1px 5px;border-radius:3px;color:var(--text-2)">settings</code> DB table and a <code style="font-family:var(--font-mono);font-size:10px;background:var(--surface-3);padding:1px 5px;border-radius:3px;color:var(--text-2)">DELETE /alerts/prune</code> endpoint. The <code style="font-family:var(--font-mono);font-size:10px;background:var(--surface-3);padding:1px 5px;border-radius:3px;color:var(--text-2)">prune_old_events.go</code> helper already exists and can be adapted.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Danger zone ───────────────────────────────────────────── -->
+      <div class="section danger-zone" id="s-danger">
+        <div class="section-head">
+          <div class="section-icon" style="background:var(--red-dim)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <div>
+            <div class="section-title">Danger Zone</div>
+            <div class="section-desc">Irreversible actions — double-check before proceeding</div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Reset UI settings</div>
+            <div class="setting-hint">Clears all <code>ids-</code> keys from localStorage and restores every setting on this page to its default value</div>
+          </div>
+          <div class="setting-control">
+            <button class="act-btn warn" onclick="resetSettings()">reset defaults</button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Clear all alerts</div>
+            <div class="setting-hint">Permanently deletes every alert from the database. Requires <code>DELETE /alerts</code> endpoint — not yet implemented</div>
+          </div>
+          <div class="setting-control">
+            <button class="act-btn danger" disabled title="Requires DELETE /alerts endpoint">delete all alerts</button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Export full alert database</div>
+            <div class="setting-hint">Download all alerts in the current fetch window as a CSV file</div>
+          </div>
+          <div class="setting-control">
+            <button class="act-btn primary" onclick="exportAll()">↓ export all CSV</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /settings-body -->
+  </div><!-- /page -->
+</div><!-- /main -->
+
+<!-- Toast -->
+<div class="toast" id="toast">
+  <div class="toast-dot" id="toast-dot"></div>
+  <span id="toast-msg">Saved</span>
+</div>
+
+<script>
+// ── Defaults ──────────────────────────────────────────────────────
+const DEFAULTS = {
+  'card-refresh':      '10000',
+  'chart-refresh':     '15000',
+  'dash-rows':         '12',
+  'timeline-bucket':   '1',
+  'clock-fmt':         'utc',
+  'alerts-per-page':   '25',
+  'alerts-sort':       'Timestamp',
+  'alerts-dir':        'desc',
+  'alerts-limit':      '2000',
+  'alerts-autorefresh':'true',
+  'log-buffer':        '2000',
+  'log-autoscroll':    'true',
+  'log-wrap':          'true',
+  'log-reconnect':     '4000',
+};
+
+const KEY = k => 'ids-' + k;
+const el  = id => document.getElementById(id);
+
+// ── Clock ──────────────────────────────────────────────────────────
+const tick = () => {
+  const s = new Date().toUTCString().slice(17,25) + ' UTC';
+  el('topbar-clock').textContent = s;
+  el('footer-time').textContent  = s;
+};
+setInterval(tick, 1000); tick();
+
+// ── Load settings into controls ────────────────────────────────────
+function loadSettings() {
+  Object.entries(DEFAULTS).forEach(([k, def]) => {
+    const val = localStorage.getItem(KEY(k)) ?? def;
+    const ctrl = el('cfg-' + k);
+    if (!ctrl) return;
+    if (ctrl.type === 'checkbox') ctrl.checked = val === 'true';
+    else ctrl.value = val;
+  });
+}
+
+// ── Save a single setting ──────────────────────────────────────────
+function save(key, value) {
+  localStorage.setItem(KEY(key), String(value));
+  flash('dot-' + key);
+  showToast('saved · ids-' + key + ' = ' + value, 'green');
+}
+
+function flash(dotId) {
+  const dot = el(dotId);
+  if (!dot) return;
+  dot.classList.add('show');
+  setTimeout(() => dot.classList.remove('show'), 1800);
+}
+
+// ── Toast ──────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, color = 'green') {
+  const t = el('toast');
+  const colors = { green: 'var(--green)', red: 'var(--red)', amber: 'var(--amber)' };
+  el('toast-dot').style.background = colors[color] || 'var(--green)';
+  el('toast-msg').textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+// ── Reset all settings ─────────────────────────────────────────────
+function resetSettings() {
+  if (!confirm('Reset all UI settings to defaults?')) return;
+  Object.keys(DEFAULTS).forEach(k => localStorage.removeItem(KEY(k)));
+  loadSettings();
+  showToast('all settings reset to defaults', 'amber');
+}
+
+// ── Scroll to section ──────────────────────────────────────────────
+function scrollTo(id) {
+  el(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.querySelectorAll('.settings-nav-item').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('onclick') === `scrollTo('${id}')`);
+  });
+}
+
+// Highlight nav item on scroll
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const id = e.target.id;
+      document.querySelectorAll('.settings-nav-item').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('onclick') === `scrollTo('${id}')`);
+      });
+    }
+  });
+}, { threshold: 0.35, rootMargin: '-60px 0px -60% 0px' });
+
+['s-system','s-dashboard','s-alerts','s-livelogs','s-notifications','s-retention','s-danger']
+  .forEach(id => { const el2 = el(id); if (el2) observer.observe(el2); });
+
+// ── System info from APIs ──────────────────────────────────────────
+async function loadSystemInfo() {
+  const api = async url => { try { const r = await fetch(url); return r.ok ? r.json() : null; } catch { return null; } };
+  const [tot, crit, ips] = await Promise.all([
+    api('/alerts/count'),
+    api('/alerts/severity-count?severity=CRITICAL'),
+    api('/alerts/unique-ips'),
+  ]);
+  if (tot)  { el('inf-total').textContent = tot.count.toLocaleString(); el('inf-total').classList.remove('loading'); }
+  if (crit) { el('inf-crit').textContent  = crit.count.toLocaleString(); el('inf-crit').classList.remove('loading'); const nb=el('nav-crit');if(nb)nb.textContent=crit.count||'—'; }
+  if (ips)  { el('inf-ips').textContent   = ips.count.toLocaleString(); el('inf-ips').classList.remove('loading'); }
+}
+
+// ── Prune check — shows how many rows would be deleted ────────────
+async function checkPrune() {
+  const btn = el('btn-prune-check');
+  btn.textContent = 'checking…'; btn.disabled = true;
+  try {
+    const r = await fetch('/alerts?limit=100000');
+    const all = r.ok ? await r.json() : [];
+    const retentionDays = parseInt(el('cfg-retention')?.value ?? '30');
+    let eligible = all.length;
+    if (retentionDays > 0) {
+      const cutoff = Date.now() - retentionDays * 86400000;
+      eligible = all.filter(a => new Date(a.Timestamp) < cutoff).length;
+    }
+    el('prune-count').textContent = eligible.toLocaleString() + ' rows eligible';
+    el('btn-prune').style.display = eligible > 0 ? '' : 'none';
+  } catch {
+    el('prune-count').textContent = 'error checking';
+  }
+  btn.textContent = 'check…'; btn.disabled = false;
+}
+
+function runPrune() {
+  showToast('DELETE /alerts/prune not yet implemented', 'amber');
+}
+
+// ── Export all CSV ─────────────────────────────────────────────────
+async function exportAll() {
+  showToast('fetching alerts…', 'green');
+  try {
+    const r = await fetch('/alerts?limit=100000');
+    const all = r.ok ? await r.json() : [];
+    const headers = ['ID','Timestamp','RuleName','Severity','Category','SourceIP','Username','Host','Message','EventCount'];
+    const rows = all.map(a => headers.map(h => `"${String(a[h]??'').replace(/"/g,'""')}"`).join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = 'ids-full-export-' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+    showToast('exported ' + all.length.toLocaleString() + ' alerts', 'green');
+  } catch {
+    showToast('export failed', 'red');
+  }
+}
+
+// ── Init ───────────────────────────────────────────────────────────
+loadSettings();
+loadSystemInfo();
+</script>
+</body>
+</html>

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>IDS — Brute Force Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090f;--surface:#0c1220;--surface-2:#101928;--surface-3:#15213a;
+  --border:rgba(96,130,200,0.1);--border-2:rgba(96,130,200,0.2);
+  --text:#dde4f0;--text-2:#7a8cad;--text-3:#3d5070;
+  --accent:#38bdf8;--accent-dim:rgba(56,189,248,0.1);
+  --red:#f87171;--red-dim:rgba(248,113,113,0.1);
+  --orange:#fb923c;--orange-dim:rgba(251,146,60,0.1);
+  --amber:#fbbf24;--amber-dim:rgba(251,191,36,0.1);
+  --green:#34d399;--green-dim:rgba(52,211,153,0.1);
+  --sidebar-w:224px;--font-ui:'IBM Plex Sans',sans-serif;--font-mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%}
+body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size:13px;line-height:1.5;display:flex}
+.sidebar{width:var(--sidebar-w);min-height:100vh;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;position:fixed;top:0;left:0;bottom:0;z-index:10;overflow-y:auto;scrollbar-width:none}
+.sidebar::-webkit-scrollbar{display:none}
+.sidebar-brand{padding:16px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);flex-shrink:0}
+.brand-icon{width:30px;height:30px;background:var(--accent-dim);border:1px solid rgba(56,189,248,0.25);border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.brand-icon svg{width:15px;height:15px}
+.brand-name{font-size:13px;font-weight:500;color:var(--text)}
+.brand-ver{font-size:10px;color:var(--text-3);font-family:var(--font-mono);margin-top:1px}
+.nav-section{padding:10px 0 4px}
+.nav-label{font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);padding:4px 14px 5px;font-weight:500}
+.nav-item{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;color:var(--text-2);text-decoration:none;cursor:pointer;transition:color .12s,background .12s;position:relative;white-space:nowrap}
+.nav-item:hover{color:var(--text);background:rgba(96,130,200,0.05)}
+.nav-item.active{color:var(--accent);background:var(--accent-dim)}
+.nav-item.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent);border-radius:0 2px 2px 0}
+.nav-item svg{width:13px;height:13px;flex-shrink:0}
+.nav-badge{margin-left:auto;font-size:9px;font-family:var(--font-mono);background:var(--red-dim);color:var(--red);padding:1px 6px;border-radius:8px;flex-shrink:0}
+.nav-chip{margin-left:auto;font-size:9px;font-family:var(--font-mono);color:var(--text-3);padding:1px 5px;border:1px solid var(--border);border-radius:4px}
+.sidebar-footer{margin-top:auto;padding:11px 14px;border-top:1px solid var(--border);flex-shrink:0}
+.footer-status{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.footer-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);animation:blink 2.4s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.footer-txt{font-size:11px;color:var(--text-2);font-family:var(--font-mono)}
+.footer-time{font-size:10px;color:var(--text-3);font-family:var(--font-mono)}
+.main{margin-left:var(--sidebar-w);flex:1;min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+.topbar{height:50px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;position:sticky;top:0;z-index:5}
+.topbar-crumb{font-size:13px;font-weight:500;color:var(--text)}
+.topbar-sep{color:var(--text-3)}
+.topbar-page{font-size:12px;color:var(--text-3);font-family:var(--font-mono)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.topbar-clock{font-size:11px;color:var(--text-3);font-family:var(--font-mono)}
+.page{padding:18px 20px 48px;flex:1}
+
+/* Summary cards */
+.scards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-bottom:14px}
+.sc{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;position:relative;overflow:hidden}
+.sc::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--c,var(--border-2))}
+.sc-lbl{font-size:10px;color:var(--text-3);margin-bottom:5px;font-weight:500;letter-spacing:.04em}
+.sc-val{font-size:22px;font-weight:500;font-family:var(--font-mono);line-height:1;color:var(--text)}
+.sc-sub{font-size:10px;color:var(--text-3);margin-top:4px;font-family:var(--font-mono)}
+
+/* Filter */
+.filter-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.f-select{background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--text-2);font-family:var(--font-mono);font-size:11px;padding:5px 8px;outline:none;cursor:pointer}
+.f-select:focus{border-color:var(--accent)}
+.f-txt{font-size:11px;color:var(--text-3);font-family:var(--font-mono);margin-left:auto}
+.f-txt strong{color:var(--text-2)}
+
+/* Campaign cards */
+.campaigns{display:flex;flex-direction:column;gap:8px}
+.camp{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;transition:border-color .15s}
+.camp:hover{border-color:var(--border-2)}
+.camp.hot{border-color:rgba(248,113,113,.25)}
+.camp-header{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;user-select:none}
+.camp-ip{font-family:var(--font-mono);font-size:13px;font-weight:500;color:var(--text);flex:1}
+.camp-badges{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.badge{font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:3px;font-weight:500;white-space:nowrap}
+.badge-hot{background:var(--red-dim);color:var(--red)}
+.badge-warn{background:var(--amber-dim);color:var(--amber)}
+.badge-ok{background:var(--green-dim);color:var(--green)}
+.camp-stat{font-family:var(--font-mono);font-size:10px;color:var(--text-3);white-space:nowrap}
+.camp-stat strong{color:var(--text-2)}
+.camp-chevron{color:var(--text-3);font-size:12px;transition:transform .2s;flex-shrink:0}
+.camp-chevron.open{transform:rotate(90deg)}
+.camp-body{display:none;padding:0 16px 14px;border-top:1px solid var(--border)}
+.camp-body.open{display:block}
+.camp-meta-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin:12px 0}
+.cm-field{display:flex;flex-direction:column;gap:2px}
+.cm-lbl{font-size:9px;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase}
+.cm-val{font-size:12px;font-family:var(--font-mono);color:var(--text)}
+/* mini rule list */
+.rule-hits{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.rh{display:flex;align-items:center;gap:8px;font-size:11px;padding:4px 0;border-bottom:1px solid var(--border)}
+.rh:last-child{border-bottom:none}
+.rh-name{flex:1;color:var(--text-2)}
+.rh-n{font-family:var(--font-mono);font-size:10px;font-weight:500;color:var(--text)}
+/* activity bar */
+.act-bar{display:flex;align-items:flex-end;gap:2px;height:28px;margin-top:10px}
+.act-seg{flex:1;border-radius:1px 1px 0 0;min-height:2px;background:var(--accent);opacity:.4}
+.act-seg.filled{opacity:.85}
+.pill{display:inline-block;font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:3px;font-weight:500;letter-spacing:.05em}
+.pill-critical{background:var(--red-dim);color:var(--red)}
+.pill-high{background:var(--orange-dim);color:var(--orange)}
+.pill-medium{background:var(--amber-dim);color:var(--amber)}
+.pill-low{background:var(--green-dim);color:var(--green)}
+.ip-link{color:var(--accent);text-decoration:none;font-family:var(--font-mono);font-size:11px}
+.ip-link:hover{text-decoration:underline}
+.empty{text-align:center;padding:40px;color:var(--text-3);font-family:var(--font-mono);font-size:12px}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:2px}
+</style>
+</head>
+<body>
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"><path d="M12 2L3 7v5c0 5 4 9.3 9 10.5C17 21.3 21 17 21 12V7z"/></svg></div>
+    <div><div class="brand-name">Log-IDS</div><div class="brand-ver">v0.1.0 · :8888</div></div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Overview</div>
+    <a href="/" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </a>
+    <a href="/alerts.html" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Alerts
+      <span class="nav-badge" id="nav-crit">—</span>
+    </a>
+    <a href="/live" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 010 8.49M7.76 16.24a6 6 0 010-8.49M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>
+      Live Logs
+    </a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Investigation</div>
+    <a href="/ip-profile.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>IP Profile</a>
+    <a href="/alert-detail.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Alert Detail</a>
+    <a href="/brute-force.html active" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Brute Force</a>
+    <a href="/timeline.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>Attack Timeline</a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">System</div>
+    <a href="/rules.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Rules Manager</a>
+    <a href="/sources.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 22V4a2 2 0 012-2h12a2 2 0 012 2v18"/><path d="M2 22h20"/><rect x="8" y="6" width="8" height="4"/></svg>Log Sources</a>
+    <a href="/reports.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Reports</a>
+    <a href="/settings.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>Settings</a>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="footer-status">
+      <div class="footer-dot"></div>
+      <span class="footer-txt">system online</span>
+    </div>
+    <div class="footer-time" id="footer-time">--:--:-- UTC</div>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-crumb">Log-IDS</span><span class="topbar-sep"> / </span><span class="topbar-page">brute-force-tracker</span>
+    <div class="topbar-right"><span class="topbar-clock" id="topbar-clock">--:--:--</span></div>
+  </div>
+  <div class="page">
+
+    <div class="scards">
+      <div class="sc" style="--c:var(--red)"><div class="sc-lbl">Active Campaigns</div><div class="sc-val" id="sc-active">—</div><div class="sc-sub">in last hour</div></div>
+      <div class="sc" style="--c:var(--orange)"><div class="sc-lbl">Total Attackers</div><div class="sc-val" id="sc-ips">—</div><div class="sc-sub">distinct IPs</div></div>
+      <div class="sc" style="--c:var(--amber)"><div class="sc-lbl">Total Attempts</div><div class="sc-val" id="sc-attempts">—</div><div class="sc-sub">event count sum</div></div>
+      <div class="sc" style="--c:var(--accent)"><div class="sc-lbl">Success After Fail</div><div class="sc-val" id="sc-success">—</div><div class="sc-sub">critical events</div></div>
+      <div class="sc" style="--c:var(--green)"><div class="sc-lbl">Most Targeted</div><div class="sc-val" id="sc-target" style="font-size:14px;padding-top:4px">—</div><div class="sc-sub" id="sc-target-n">—</div></div>
+    </div>
+
+    <div class="filter-bar">
+      <select class="f-select" id="f-type" onchange="render()">
+        <option value="">All brute-force types</option>
+        <option value="SSH">SSH</option>
+        <option value="SUDO">SUDO</option>
+        <option value="SU">SU</option>
+        <option value="Web">Web Login</option>
+        <option value="Invalid">Invalid User</option>
+      </select>
+      <select class="f-select" id="f-window" onchange="render()">
+        <option value="3600000">Last 1 hour</option>
+        <option value="21600000">Last 6 hours</option>
+        <option value="86400000" selected>Last 24 hours</option>
+        <option value="604800000">Last 7 days</option>
+        <option value="0">All time</option>
+      </select>
+      <span class="f-txt" id="f-stat">loading…</span>
+    </div>
+
+    <div class="campaigns" id="campaigns"><div class="empty">loading…</div></div>
+  </div>
+</div>
+
+<script>
+const el=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const tick=()=>{const s=new Date().toUTCString().slice(17,25)+' UTC';el('topbar-clock').textContent=s;el('footer-time').textContent=s};
+setInterval(tick,1000);tick();
+const pill=sev=>`<span class="pill pill-${(sev||'').toLowerCase()}">${esc(sev)}</span>`;
+const fmtShort=ts=>{const d=new Date(ts);return isNaN(d)?'—':d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour12:false,second:undefined})};
+const fmtAge=ts=>{const d=Date.now()-new Date(ts);if(d<60000)return Math.floor(d/1000)+'s ago';if(d<3600000)return Math.floor(d/60000)+'m ago';if(d<86400000)return Math.floor(d/3600000)+'h ago';return Math.floor(d/86400000)+'d ago'};
+
+const BRUTE_RULES=[
+  'SSH Brute Force','SSH Username Enumeration','SSH Suspicious Login','Invalid User Brute Force',
+  'SSH Rapid Reconnect','SSH Root Targeting','Distributed Brute Force',
+  'SUDO Brute Force','SUDO Success After Failure','SUDO Command Abuse',
+  'SU Brute Force','SU Success After Failure',
+  'Web Login Brute Force','Web Path Enumeration',
+];
+const SUCCESS_RULES=['SSH Suspicious Login','SU Success After Failure','SUDO Success After Failure'];
+
+let allAlerts=[];
+
+async function load(){
+  try{const r=await fetch('/alerts?limit=2000');allAlerts=r.ok?(await r.json()??[]):[];}catch{allAlerts=[];}
+  const crit=allAlerts.filter(a=>a.Severity==='CRITICAL').length;
+  const nb=el('nav-crit');if(nb)nb.textContent=crit||'—';
+  render();
+}
+
+function render(){
+  const typeFilter=el('f-type').value;
+  const windowMs=+el('f-window').value;
+  const now=Date.now();
+  const cutoff=windowMs>0?now-windowMs:0;
+
+  // Filter to brute-force alerts in window
+  const brute=allAlerts.filter(a=>{
+    if(!BRUTE_RULES.includes(a.RuleName))return false;
+    if(cutoff&&new Date(a.Timestamp)<cutoff)return false;
+    if(typeFilter&&!a.RuleName.includes(typeFilter))return false;
+    return true;
+  });
+
+  // Group by source IP
+  const byIP={};
+  brute.forEach(a=>{
+    const ip=a.SourceIP||'unknown';
+    if(!byIP[ip])byIP[ip]={ip,alerts:[],rules:{},maxSev:0,attempts:0,first:null,last:null};
+    const g=byIP[ip];
+    g.alerts.push(a);
+    g.rules[a.RuleName]=(g.rules[a.RuleName]||0)+1;
+    g.attempts+=(a.EventCount||1);
+    const t=new Date(a.Timestamp);
+    if(!g.first||t<g.first)g.first=t;
+    if(!g.last||t>g.last)g.last=t;
+    const sevOrd={CRITICAL:4,HIGH:3,MEDIUM:2,LOW:1};
+    if((sevOrd[a.Severity]||0)>g.maxSev)g.maxSev=sevOrd[a.Severity]||0;
+  });
+
+  const campaigns=Object.values(byIP).sort((a,b)=>b.last-a.last);
+  const hourAgo=now-3600000;
+  const activeCamps=campaigns.filter(c=>c.last>hourAgo).length;
+  const totalAttempts=campaigns.reduce((s,c)=>s+c.attempts,0);
+  const successCount=allAlerts.filter(a=>SUCCESS_RULES.includes(a.RuleName)&&(cutoff===0||new Date(a.Timestamp)>=cutoff)).length;
+
+  // Most targeted username
+  const userCounts={};
+  brute.forEach(a=>{if(a.Username&&a.Username!=='-')userCounts[a.Username]=(userCounts[a.Username]||0)+1});
+  const topUser=Object.entries(userCounts).sort((a,b)=>b[1]-a[1])[0];
+
+  el('sc-active').textContent=activeCamps;
+  el('sc-ips').textContent=campaigns.length;
+  el('sc-attempts').textContent=totalAttempts.toLocaleString();
+  el('sc-success').textContent=successCount;
+  el('sc-target').textContent=topUser?topUser[0]:'—';
+  el('sc-target-n').textContent=topUser?topUser[1]+' hits':'no data';
+  el('f-stat').innerHTML=`Showing <strong>${campaigns.length}</strong> attackers · <strong>${brute.length}</strong> alerts`;
+
+  const box=el('campaigns');
+  if(!campaigns.length){box.innerHTML='<div class="empty">no brute-force activity in selected window</div>';return;}
+
+  const sevLabel={4:'CRITICAL',3:'HIGH',2:'MEDIUM',1:'LOW',0:'LOW'};
+  box.innerHTML=campaigns.map((c,i)=>{
+    const isHot=c.last>hourAgo;
+    const sev=sevLabel[c.maxSev]||'LOW';
+    const topRules=Object.entries(c.rules).sort((a,b)=>b[1]-a[1]);
+    const hasSuccess=c.alerts.some(a=>SUCCESS_RULES.includes(a.RuleName));
+
+    // 12 hourly sparkline buckets
+    const bins=new Array(12).fill(0);
+    c.alerts.forEach(a=>{const h=Math.floor((now-new Date(a.Timestamp))/3600000);if(h>=0&&h<12)bins[11-h]++;});
+    const maxBin=Math.max(1,...bins);
+    const spark=bins.map(v=>`<div class="act-seg ${v>0?'filled':''}" style="height:${Math.max(8,Math.round(v/maxBin*100))}%;opacity:${v>0?0.4+v/maxBin*0.55:0.15}"></div>`).join('');
+
+    return `<div class="camp${isHot?' hot':''}" id="camp-${i}">
+      <div class="camp-header" onclick="toggle(${i})">
+        <div class="camp-ip">${esc(c.ip)}</div>
+        <div class="camp-badges">
+          ${hasSuccess?'<span class="badge badge-hot">⚡ success</span>':''}
+          ${isHot?'<span class="badge badge-hot">active</span>':'<span class="badge badge-ok">dormant</span>'}
+          ${pill(sev)}
+        </div>
+        <span class="camp-stat"><strong>${c.attempts.toLocaleString()}</strong> attempts</span>
+        <span class="camp-stat"><strong>${Object.keys(c.rules).length}</strong> rules</span>
+        <span class="camp-stat">${fmtAge(c.last)}</span>
+        <span class="camp-chevron" id="chev-${i}">›</span>
+      </div>
+      <div class="camp-body" id="body-${i}">
+        <div class="camp-meta-row">
+          <div class="cm-field"><div class="cm-lbl">First seen</div><div class="cm-val">${fmtShort(c.first)}</div></div>
+          <div class="cm-field"><div class="cm-lbl">Last seen</div><div class="cm-val">${fmtShort(c.last)}</div></div>
+          <div class="cm-field"><div class="cm-lbl">Total alerts</div><div class="cm-val">${c.alerts.length}</div></div>
+          <div class="cm-field"><div class="cm-lbl">Total events</div><div class="cm-val">${c.attempts.toLocaleString()}</div></div>
+          <div class="cm-field"><div class="cm-lbl">IP Profile</div><div class="cm-val"><a class="ip-link" href="/ip-profile.html?ip=${encodeURIComponent(c.ip)}">view profile →</a></div></div>
+        </div>
+        <div style="font-size:9px;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">Activity (last 12 h)</div>
+        <div class="act-bar">${spark}</div>
+        <div style="font-size:9px;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;margin:12px 0 6px">Rules triggered</div>
+        <div class="rule-hits">
+          ${topRules.map(([rule,n])=>`<div class="rh"><span class="rh-name">${esc(rule)}</span><span class="rh-n">${n}</span></div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggle(i){
+  const body=el('body-'+i),chev=el('chev-'+i);
+  const open=body.classList.toggle('open');
+  chev.classList.toggle('open',open);
+}
+
+load();
+setInterval(load,20000);
+</script>
+</body>
+</html>
