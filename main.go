@@ -47,15 +47,23 @@ func main() {
 		log.Fatal(err)
 	}
 	alertRepo := &database.AlertRepository{DB: db}
+	settingsRepo := &database.SettingsRepository{DB: db}
 	alertManager := &alert.Manager{
-		AlertRepo: alertRepo,
+		AlertRepo:    alertRepo,
+		SettingsRepo: settingsRepo,
 	}
 
+	// ── Infrastructure ────────────────────────────────────────────────────────
 	broadcaster := stream.NewBroadcaster()
 
+	// Shared per-source line counters exposed via /sources/status
+	stats := collector.NewSourceStats()
+
 	apiHandler := &api.Handler{
-		Repo:        alertRepo,
-		Broadcaster: broadcaster,
+		Repo:         alertRepo,
+		SettingsRepo: settingsRepo,
+		Broadcaster:  broadcaster,
+		Stats:        stats,
 	}
 	router := api.NewRouter(apiHandler)
 	server := &api.Server{Handler: router}
@@ -70,11 +78,13 @@ func main() {
 			FilePath:    "/var/log/auth.log",
 			Source:      "auth",
 			Broadcaster: broadcaster,
+			Stats:       stats,
 		},
 		{
 			FilePath:    "/var/log/kern.log",
 			Source:      "kern",
 			Broadcaster: broadcaster,
+			Stats:       stats,
 		},
 		{
 			// Raw auditd log — ParserWorker detects "type=..." lines and
@@ -82,19 +92,23 @@ func main() {
 			FilePath:    "/var/log/audit/audit.log",
 			Source:      "audit",
 			Broadcaster: broadcaster,
+			Stats:       stats,
 		},
 		{
 			FilePath:    "/var/log/apache2/access.log",
 			Source:      "apache2",
 			Broadcaster: broadcaster,
+			Stats:       stats,
 		},
 		{
 			FilePath:    "/var/log/nginx/access.log",
 			Source:      "nginx",
 			Broadcaster: broadcaster,
+			Stats:       stats,
 		},
 	}
 
+	// ── Detection engine ──────────────────────────────────────────────────────
 	engine := detection.NewEngine([]detection.Rule{
 		// ── SSH ──────────────────────────────────────────────────────────────
 		authrule.NewSSHBruteForceRule(),
@@ -165,6 +179,7 @@ func main() {
 	// is killed before defer teardown() can run — leaving stale iptables rules.
 	nflogCollector := &collector.NFLOGCollector{
 		Broadcaster: broadcaster,
+		Stats:       stats,
 	}
 	var wg sync.WaitGroup
 	wg.Add(1)

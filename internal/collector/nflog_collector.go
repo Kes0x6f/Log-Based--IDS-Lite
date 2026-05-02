@@ -28,6 +28,7 @@ const nflogGroup = 100
 // and the socket is closed cleanly.
 type NFLOGCollector struct {
 	Broadcaster *stream.Broadcaster
+	Stats       *SourceStats
 }
 
 // ── iptables lifecycle ─────────────────────────────────────────────────────
@@ -150,9 +151,11 @@ func (c *NFLOGCollector) Start(ctx context.Context, out chan<- *model.Normalized
 
 		log.Printf("NFLOGCollector: [%s] src=%s port=%s proto=%s",
 			event.EventType, event.SourceIP, event.Port, event.Command)
-
+		if c.Stats != nil {
+			c.Stats.RecordLine(event.LogSource)
+		}
 		if c.Broadcaster != nil {
-			c.Broadcaster.Publish(event.RawLine)
+			c.Broadcaster.Publish(event.LogSource, event.RawLine)
 		}
 
 		select {

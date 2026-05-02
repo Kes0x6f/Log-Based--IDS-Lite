@@ -14,6 +14,7 @@ import (
 // The real implementation lives in nflog_collector.go (Linux only).
 type NFLOGCollector struct {
 	Broadcaster *stream.Broadcaster
+	Stats       *SourceStats
 }
 
 func (c *NFLOGCollector) Start(ctx context.Context, out chan<- *model.NormalizedEvent) {

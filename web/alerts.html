@@ -139,17 +139,12 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
     <a href="/reports.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Reports</a>
     <a href="/settings.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>Settings</a>
   </div>
-
+  
   <div class="sidebar-footer">
     <div class="footer-status">
       <div class="footer-dot"></div>
       <span class="footer-txt">system online</span>
     </div>
-    <div class="footer-time" id="footer-time">--:--:-- UTC</div>
-  </div>
-</nav>
-  <div class="sidebar-footer">
-    <div class="footer-status"><div class="footer-dot"></div><span class="footer-txt">system online</span></div>
     <div class="footer-time" id="footer-time">--:--:-- UTC</div>
   </div>
 </nav>
@@ -201,10 +196,15 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
 
 <script>
 let ALL=[], filtered=[], page=1;
-const PER=25;
-let sortCol='Timestamp', sortDir='desc';
+// Read display preferences from Settings page localStorage values.
+let PER      = parseInt(localStorage.getItem('ids-alerts-per-page') || '25');
+let sortCol  = localStorage.getItem('ids-alerts-sort') || 'Timestamp';
+let sortDir  = localStorage.getItem('ids-alerts-dir')  || 'desc';
+const LIMIT  = parseInt(localStorage.getItem('ids-alerts-limit')    || '2000');
+const AUTO_REFRESH = (localStorage.getItem('ids-alerts-autorefresh') ?? 'true') === 'true';
 
-const tick=()=>{const s=new Date().toUTCString().slice(17,25)+' UTC';document.getElementById('topbar-clock').textContent=s;document.getElementById('footer-time').textContent=s};
+function fmtClock(){const f=localStorage.getItem('ids-clock-fmt')||'utc';const n=new Date();if(f==='local24')return n.toLocaleTimeString('en-GB',{hour12:false})+' local';if(f==='local12')return n.toLocaleTimeString('en-US',{hour12:true})+' local';return n.toUTCString().slice(17,25)+' UTC';}
+const tick=()=>{const s=fmtClock();document.getElementById('topbar-clock').textContent=s;document.getElementById('footer-time').textContent=s};
 setInterval(tick,1000);tick();
 
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -212,14 +212,19 @@ const pill=sev=>`<span class="pill pill-${(sev||'low').toLowerCase()}">${esc(sev
 const fmtTime=ts=>{const d=new Date(ts);return isNaN(d)?'—':d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour12:false})};
 
 async function load(){
-  try{const r=await fetch('/alerts?limit=2000');ALL=r.ok?(await r.json()??[]):[];}catch{ALL=[];}
+  try{const r=await fetch(`/alerts?limit=${LIMIT}`);ALL=r.ok?(await r.json()??[]):[];}catch{ALL=[];}
   const cats=[...new Set(ALL.map(a=>a.Category).filter(Boolean))].sort();
   const sel=document.getElementById('f-cat');
-  cats.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);});
-  const crit=ALL.filter(a=>a.Severity==='CRITICAL').length;
-  const nb=document.getElementById('nav-crit');if(nb)nb.textContent=crit||'—';
+  // Only populate once — avoid duplicates on refresh
+  if(sel.options.length <= 1) {
+    cats.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);});
+  }
+  updateCriticalBadge();
   applyFilters();
 }
+
+// Auto-refresh respects the setting
+if(AUTO_REFRESH){ setInterval(()=>{load();},30000); }
 
 function onFilter(){page=1;applyFilters();}
 function applyFilters(){
@@ -268,12 +273,18 @@ function renderTable(){
     const ip=a.SourceIP&&a.SourceIP!=='-'&&a.SourceIP!==''
       ?`<a class="ip-link" href="/ip-profile.html?ip=${encodeURIComponent(a.SourceIP)}">${esc(a.SourceIP)}</a>`
       :`<span class="mono">${esc(a.SourceIP||'—')}</span>`;
-    return`<tr>
+    const detailUrl = `/alert-detail.html?id=${encodeURIComponent(a.ID)}`;
+
+    return`<tr onclick="location.href='${detailUrl}'" style="cursor:pointer">
       <td class="mono">${fmtTime(a.Timestamp)}</td>
       <td>${pill(a.Severity)}</td>
-      <td class="rule-cell">${esc(a.RuleName||'—')}</td>
+      <td class="rule-cell">
+        <a href="${detailUrl}" style="color:inherit;text-decoration:none">
+          ${esc(a.RuleName||'—')}
+        </a>
+      </td>
       <td><span class="cat-tag">${esc(a.Category||'—')}</span></td>
-      <td>${ip}</td>
+      <td onclick="event.stopPropagation()">${ip}</td>
       <td class="mono">${esc(a.Username||'—')}</td>
       <td class="msg-cell" title="${esc(a.Message||'')}">${esc(a.Message||'—')}</td>
       <td class="cnt-cell">${a.EventCount||1}</td>
@@ -326,8 +337,39 @@ function exportCSV(){
   a.click();
 }
 
+async function updateCriticalBadge() {
+  try {
+    const r = await fetch('/alerts/severity-count?severity=CRITICAL');
+    if (!r.ok) return;
+
+    const data = await r.json();
+    const badge = document.getElementById('nav-crit');
+
+    if (badge) {
+      badge.textContent = data.count > 0 ? data.count : '—';
+    }
+  } catch {
+    const badge = document.getElementById('nav-crit');
+    if (badge) badge.textContent = '—';
+  }
+}
+
+updateCriticalBadge();
+setInterval(updateCriticalBadge, 15000);
+
+// Pre-fill search box from URL params so deep-links from other pages work.
+// Supports ?ip=x.x.x.x (from IP Profile) and ?rule=Name (from Rules Manager).
+(function applyURLParams() {
+  const params = new URLSearchParams(location.search);
+  const ip   = params.get('ip');
+  const rule = params.get('rule');
+  const box  = document.getElementById('f-text');
+  if (!box) return;
+  if (rule) box.value = rule;
+  else if (ip) box.value = ip;
+})();
+
 load();
-setInterval(()=>{load();},30000);
 </script>
 </body>
 </html>

@@ -500,66 +500,68 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
             <div class="section-title">Notifications</div>
             <div class="section-desc">Webhook and email alerts for high-severity events</div>
           </div>
-          <span class="needs-backend">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            needs backend
-          </span>
+          <span class="local-badge">live</span>
         </div>
 
-        <div class="setting-row disabled">
+        <div class="setting-row">
           <div class="setting-info">
             <div class="setting-label">Webhook URL</div>
-            <div class="setting-hint">POST JSON alert payload to this URL when a rule fires. Requires <code>POST /settings</code> and a <code>settings</code> table in the DB</div>
+            <div class="setting-hint">POST JSON alert payload to this URL when a rule fires.</div>
           </div>
           <div class="setting-control">
-            <input class="s-input" type="url" id="cfg-webhook-url" placeholder="https://hooks.example.com/…">
+            <input class="s-input" type="url" id="cfg-webhook-url" placeholder="https://hooks.example.com/…"
+              onchange="save('webhook-url', this.value)">
+            <div class="save-dot" id="dot-webhook-url"></div>
           </div>
         </div>
 
-        <div class="setting-row disabled">
+        <div class="setting-row">
           <div class="setting-info">
             <div class="setting-label">Notify on severity</div>
-            <div class="setting-hint">Minimum severity level that triggers a webhook or email notification</div>
+            <div class="setting-hint">Minimum severity level that triggers a notification</div>
           </div>
           <div class="setting-control">
-            <select class="s-select" id="cfg-notify-sev">
+            <select class="s-select" id="cfg-notify-sev" onchange="save('notify-sev', this.value)">
               <option value="CRITICAL">Critical only</option>
               <option value="HIGH">High and above</option>
               <option value="MEDIUM">Medium and above</option>
               <option value="LOW">All alerts</option>
             </select>
+            <div class="save-dot" id="dot-notify-sev"></div>
           </div>
         </div>
 
-        <div class="setting-row disabled">
+        <div class="setting-row">
           <div class="setting-info">
             <div class="setting-label">Deduplicate window</div>
             <div class="setting-hint">Suppress repeated webhook calls for the same rule + IP within this window</div>
           </div>
           <div class="setting-control">
-            <select class="s-select" id="cfg-notify-dedup">
+            <select class="s-select" id="cfg-notify-dedup" onchange="save('notify-dedup', this.value)">
               <option value="60">1 minute</option>
               <option value="300">5 minutes</option>
               <option value="900">15 minutes</option>
               <option value="3600">1 hour</option>
             </select>
+            <div class="save-dot" id="dot-notify-dedup"></div>
           </div>
         </div>
 
-        <div class="setting-row disabled">
+        <div class="setting-row">
           <div class="setting-info">
             <div class="setting-label">Test webhook</div>
-            <div class="setting-hint">Send a test payload to the configured URL to verify connectivity</div>
+            <div class="setting-hint">Sends a synthetic HIGH-severity test payload to the configured URL</div>
           </div>
           <div class="setting-control">
-            <button class="act-btn primary" disabled>send test →</button>
+            <span id="test-webhook-result" style="font-size:11px;color:var(--text-3);font-family:var(--font-mono)"></span>
+            <button class="act-btn primary" id="btn-test-webhook" onclick="testWebhook()">send test →</button>
           </div>
         </div>
 
         <div class="setting-row" style="background:var(--surface-2);border-top:1px solid var(--border)">
           <div class="setting-info" style="flex:1">
             <div style="font-size:11px;color:var(--text-3);line-height:1.5">
-              Notifications require a <code style="font-family:var(--font-mono);font-size:10px;background:var(--surface-3);padding:1px 5px;border-radius:3px;color:var(--text-2)">settings</code> table in the database and a <code style="font-family:var(--font-mono);font-size:10px;background:var(--surface-3);padding:1px 5px;border-radius:3px;color:var(--text-2)">GET / POST /settings</code> API endpoint. A background goroutine will also be needed to fire webhooks on alert insertion.
+              Webhook settings are persisted in the database and take effect immediately — no restart required. The deduplication window is enforced per rule + source IP pair.
             </div>
           </div>
         </div>
@@ -575,19 +577,16 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
             <div class="section-title">Data Retention</div>
             <div class="section-desc">Alert database pruning and storage limits</div>
           </div>
-          <span class="needs-backend">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            needs backend
-          </span>
+          <span class="local-badge">live</span>
         </div>
 
-        <div class="setting-row disabled">
+        <div class="setting-row">
           <div class="setting-info">
             <div class="setting-label">Retention period</div>
-            <div class="setting-hint">Alerts older than this are automatically pruned. Requires a scheduled <code>DELETE FROM alerts WHERE timestamp &lt; ?</code> and a <code>POST /settings</code> endpoint to persist the value</div>
+            <div class="setting-hint">Used by the manual prune button below. Automatic scheduled pruning is not yet wired — use the prune button or set a max-rows cap instead.</div>
           </div>
           <div class="setting-control">
-            <select class="s-select" id="cfg-retention">
+            <select class="s-select" id="cfg-retention" onchange="save('retention', this.value)">
               <option value="7">7 days</option>
               <option value="14">14 days</option>
               <option value="30">30 days</option>
@@ -595,40 +594,42 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
               <option value="90">90 days</option>
               <option value="0">Forever</option>
             </select>
+            <div class="save-dot" id="dot-retention"></div>
           </div>
         </div>
 
-        <div class="setting-row disabled">
+        <div class="setting-row">
           <div class="setting-info">
             <div class="setting-label">Max alert rows</div>
-            <div class="setting-hint">Hard cap on the number of rows in the <code>alerts</code> table — oldest alerts pruned when exceeded. Requires <code>DELETE /alerts/prune?keep=N</code></div>
+            <div class="setting-hint">Hard cap on total rows — oldest alerts are pruned automatically after each new alert is inserted when this limit is exceeded.</div>
           </div>
           <div class="setting-control">
-            <select class="s-select" id="cfg-max-rows">
+            <select class="s-select" id="cfg-max-rows" onchange="save('max-rows',this.value)">
               <option value="10000">10 000</option>
               <option value="50000">50 000</option>
               <option value="100000">100 000</option>
               <option value="0">No limit</option>
             </select>
+            <div class="save-dot" id="dot-max-rows"></div>
           </div>
         </div>
 
         <div class="setting-row">
           <div class="setting-info">
             <div class="setting-label">Manual prune</div>
-            <div class="setting-hint">Delete all alerts older than the selected retention period right now. Will require <code>DELETE /alerts/prune</code> endpoint to be implemented first</div>
+            <div class="setting-hint">Check how many alerts are older than the retention period, then delete them immediately.</div>
           </div>
           <div class="setting-control" style="gap:10px">
             <span id="prune-count" style="font-size:11px;color:var(--text-3);font-family:var(--font-mono)"></span>
             <button class="act-btn warn" onclick="checkPrune()" id="btn-prune-check">check…</button>
-            <button class="act-btn danger" id="btn-prune" onclick="runPrune()" style="display:none" disabled title="Requires DELETE /alerts/prune endpoint">prune now</button>
+            <button class="act-btn danger" id="btn-prune" onclick="runPrune()" style="display:none">prune now</button>
           </div>
         </div>
 
         <div class="setting-row" style="background:var(--surface-2);border-top:1px solid var(--border)">
           <div class="setting-info" style="flex:1">
             <div style="font-size:11px;color:var(--text-3);line-height:1.5">
-              Retention configuration requires a <code style="font-family:var(--font-mono);font-size:10px;background:var(--surface-3);padding:1px 5px;border-radius:3px;color:var(--text-2)">settings</code> DB table and a <code style="font-family:var(--font-mono);font-size:10px;background:var(--surface-3);padding:1px 5px;border-radius:3px;color:var(--text-2)">DELETE /alerts/prune</code> endpoint. The <code style="font-family:var(--font-mono);font-size:10px;background:var(--surface-3);padding:1px 5px;border-radius:3px;color:var(--text-2)">prune_old_events.go</code> helper already exists and can be adapted.
+              Retention period and max-rows are persisted in the database. The max-rows cap is enforced automatically on every new alert insert. Manual prune uses <code style="font-family:var(--font-mono);font-size:10px;background:var(--surface-3);padding:1px 5px;border-radius:3px;color:var(--text-2)">DELETE /alerts/prune?days=N</code>.
             </div>
           </div>
         </div>
@@ -659,10 +660,10 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
         <div class="setting-row">
           <div class="setting-info">
             <div class="setting-label">Clear all alerts</div>
-            <div class="setting-hint">Permanently deletes every alert from the database. Requires <code>DELETE /alerts</code> endpoint — not yet implemented</div>
+            <div class="setting-hint">Permanently deletes every alert from the database via <code>DELETE /alerts/all</code>. This cannot be undone.</div>
           </div>
           <div class="setting-control">
-            <button class="act-btn danger" disabled title="Requires DELETE /alerts endpoint">delete all alerts</button>
+            <button class="act-btn danger" onclick="deleteAllAlerts()">delete all alerts</button>
           </div>
         </div>
 
@@ -688,7 +689,7 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
 </div>
 
 <script>
-// ── Defaults ──────────────────────────────────────────────────────
+// ── Defaults (localStorage fallback when backend has no value) ────
 const DEFAULTS = {
   'card-refresh':      '10000',
   'chart-refresh':     '15000',
@@ -704,23 +705,47 @@ const DEFAULTS = {
   'log-autoscroll':    'true',
   'log-wrap':          'true',
   'log-reconnect':     '4000',
+  // Backend-persisted settings
+  'webhook-url':       '',
+  'notify-sev':        'CRITICAL',
+  'notify-dedup':      '300',
+  'retention':         '30',
+  'max-rows':          '0',
 };
 
 const KEY = k => 'ids-' + k;
 const el  = id => document.getElementById(id);
 
 // ── Clock ──────────────────────────────────────────────────────────
+function fmtClock() {
+  const fmt = localStorage.getItem('ids-clock-fmt') || 'utc';
+  const now = new Date();
+  if (fmt === 'local24') return now.toLocaleTimeString('en-GB', {hour12: false}) + ' local';
+  if (fmt === 'local12') return now.toLocaleTimeString('en-US', {hour12: true}) + ' local';
+  return now.toUTCString().slice(17, 25) + ' UTC';
+}
 const tick = () => {
-  const s = new Date().toUTCString().slice(17,25) + ' UTC';
+  const s = fmtClock();
   el('topbar-clock').textContent = s;
   el('footer-time').textContent  = s;
 };
 setInterval(tick, 1000); tick();
 
-// ── Load settings into controls ────────────────────────────────────
-function loadSettings() {
+// ── Load settings: backend first, then localStorage, then defaults ─
+// Change 5: merge persisted backend settings into the UI on page load.
+async function loadSettings() {
+  let backendSettings = {};
+  try {
+    const r = await fetch('/settings');
+    if (r.ok) backendSettings = await r.json() ?? {};
+  } catch {}
+
   Object.entries(DEFAULTS).forEach(([k, def]) => {
-    const val = localStorage.getItem(KEY(k)) ?? def;
+    const backendVal = backendSettings[k];
+    const localVal   = localStorage.getItem(KEY(k));
+    // Backend wins for keys it knows about; localStorage wins for UI-only keys.
+    const val = backendVal !== undefined ? backendVal : (localVal ?? def);
+
     const ctrl = el('cfg-' + k);
     if (!ctrl) return;
     if (ctrl.type === 'checkbox') ctrl.checked = val === 'true';
@@ -729,10 +754,50 @@ function loadSettings() {
 }
 
 // ── Save a single setting ──────────────────────────────────────────
-function save(key, value) {
-  localStorage.setItem(KEY(key), String(value));
+// Change 5: backend-persisted keys (webhook, retention, etc.) are written
+// to POST /settings; UI-only keys go to localStorage as before.
+const BACKEND_KEYS = new Set([
+  'webhook-url','notify-sev','notify-dedup','retention','max-rows',
+]);
+
+async function testWebhook() {
+  const btn = el('btn-test-webhook');
+  const result = el('test-webhook-result');
+  btn.disabled = true; btn.textContent = 'sending…';
+  result.textContent = '';
+  try {
+    const r = await fetch('/settings/test-webhook', { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data);
+    result.textContent = `✓ HTTP ${data.status}`;
+    result.style.color = 'var(--green)';
+    showToast(`test webhook sent → HTTP ${data.status}`, 'green');
+  } catch (err) {
+    result.textContent = '✗ ' + err.message;
+    result.style.color = 'var(--red)';
+    showToast('test failed: ' + err.message, 'red');
+  }
+  btn.disabled = false; btn.textContent = 'send test →';
+}
+
+async function save(key, value) {
+  if (BACKEND_KEYS.has(key)) {
+    try {
+      const r = await fetch('/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({key, value: String(value)}),
+      });
+      if (!r.ok) throw new Error(await r.text());
+    } catch (err) {
+      showToast('save failed: ' + err.message, 'red');
+      return;
+    }
+  } else {
+    localStorage.setItem(KEY(key), String(value));
+  }
   flash('dot-' + key);
-  showToast('saved · ids-' + key + ' = ' + value, 'green');
+  showToast('saved · ' + key + ' = ' + value, 'green');
 }
 
 function flash(dotId) {
@@ -770,7 +835,6 @@ function scrollTo(id) {
   });
 }
 
-// Highlight nav item on scroll
 const observer = new IntersectionObserver(entries => {
   entries.forEach(e => {
     if (e.isIntersecting) {
@@ -783,7 +847,7 @@ const observer = new IntersectionObserver(entries => {
 }, { threshold: 0.35, rootMargin: '-60px 0px -60% 0px' });
 
 ['s-system','s-dashboard','s-alerts','s-livelogs','s-notifications','s-retention','s-danger']
-  .forEach(id => { const el2 = el(id); if (el2) observer.observe(el2); });
+  .forEach(id => { const e2 = el(id); if (e2) observer.observe(e2); });
 
 // ── System info from APIs ──────────────────────────────────────────
 async function loadSystemInfo() {
@@ -798,29 +862,68 @@ async function loadSystemInfo() {
   if (ips)  { el('inf-ips').textContent   = ips.count.toLocaleString(); el('inf-ips').classList.remove('loading'); }
 }
 
-// ── Prune check — shows how many rows would be deleted ────────────
+// ── Prune — Change 6 ──────────────────────────────────────────────
+// Shows how many rows are eligible, then issues DELETE /alerts/prune.
 async function checkPrune() {
   const btn = el('btn-prune-check');
   btn.textContent = 'checking…'; btn.disabled = true;
   try {
-    const r = await fetch('/alerts?limit=100000');
-    const all = r.ok ? await r.json() : [];
     const retentionDays = parseInt(el('cfg-retention')?.value ?? '30');
-    let eligible = all.length;
-    if (retentionDays > 0) {
-      const cutoff = Date.now() - retentionDays * 86400000;
-      eligible = all.filter(a => new Date(a.Timestamp) < cutoff).length;
+    if (retentionDays <= 0) {
+      el('prune-count').textContent = 'retention set to forever — nothing to prune';
+      el('btn-prune').style.display = 'none';
+      btn.textContent = 'check…'; btn.disabled = false;
+      return;
     }
-    el('prune-count').textContent = eligible.toLocaleString() + ' rows eligible';
-    el('btn-prune').style.display = eligible > 0 ? '' : 'none';
-  } catch {
-    el('prune-count').textContent = 'error checking';
+    const r = await fetch(`/alerts/count-before?days=${retentionDays}`);
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    const count = data.count ?? 0;
+    if (count === 0) {
+      el('prune-count').textContent = `no alerts older than ${retentionDays} day(s)`;
+      el('btn-prune').style.display = 'none';
+    } else {
+      el('prune-count').textContent = `${count.toLocaleString()} alert(s) older than ${retentionDays} day(s) will be deleted`;
+      el('btn-prune').style.display = '';
+      el('btn-prune').disabled = false;
+    }
+  } catch (err) {
+    el('prune-count').textContent = 'error: ' + err.message;
   }
   btn.textContent = 'check…'; btn.disabled = false;
 }
 
-function runPrune() {
-  showToast('DELETE /alerts/prune not yet implemented', 'amber');
+async function runPrune() {
+  const retentionDays = parseInt(el('cfg-retention')?.value ?? '30');
+  if (!confirm(`Delete all alerts older than ${retentionDays} day(s)? This cannot be undone.`)) return;
+
+  try {
+    const r = await fetch(`/alerts/prune?days=${retentionDays}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    showToast(`pruned ${data.deleted} alert(s)`, 'amber');
+    el('prune-count').textContent = `deleted ${data.deleted} row(s)`;
+    el('btn-prune').style.display = 'none';
+    loadSystemInfo();
+  } catch (err) {
+    showToast('prune failed: ' + err.message, 'red');
+  }
+}
+
+// ── Delete all — Change 7 ─────────────────────────────────────────
+async function deleteAllAlerts() {
+  if (!confirm('Permanently delete ALL alerts? This cannot be undone.')) return;
+  if (!confirm('Are you sure? Every alert record will be erased.')) return;
+
+  try {
+    const r = await fetch('/alerts/all', { method: 'DELETE' });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    showToast(`deleted ${data.deleted} alert(s)`, 'red');
+    loadSystemInfo();
+  } catch (err) {
+    showToast('delete failed: ' + err.message, 'red');
+  }
 }
 
 // ── Export all CSV ─────────────────────────────────────────────────

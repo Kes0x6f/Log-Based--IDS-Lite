@@ -16,16 +16,21 @@ type FileCollector struct {
 	FilePath    string
 	Source      string
 	Broadcaster *stream.Broadcaster
+	// Stats is optional; when non-nil, every emitted line is counted.
+	Stats *SourceStats
 }
 
 type RawLog struct {
-	Source  string //"auth", "syslog"
+	Source  string // "auth", "ufw", "kern", "audit", "apache2", "nginx"
 	Message string
 }
 
 func (fc *FileCollector) Start(out chan<- RawLog) error {
 	file, reader, err := openFile(fc.FilePath)
 	if err != nil {
+		if fc.Stats != nil {
+			fc.Stats.SetWatcherAlive(fc.Source, false)
+		}
 		return err
 	}
 
@@ -35,7 +40,12 @@ func (fc *FileCollector) Start(out chan<- RawLog) error {
 	}
 
 	watcher.Add(filepath.Dir(fc.FilePath))
-	//Partial line changes
+
+	if fc.Stats != nil {
+		fc.Stats.SetWatcherAlive(fc.Source, true)
+	}
+
+	// Partial line buffer — carries incomplete lines across read iterations.
 	buffer := ""
 
 	go func() {
@@ -48,17 +58,21 @@ func (fc *FileCollector) Start(out chan<- RawLog) error {
 					continue
 				}
 
-				//Handles log rotation
+				// Handle log rotation: file renamed then re-created.
 				if event.Op&(fsnotify.Rename|fsnotify.Create) != 0 {
 					file.Close()
 					file, reader, err = openFile(fc.FilePath)
 					if err != nil {
 						log.Println("reopen error:", err)
+						if fc.Stats != nil {
+							fc.Stats.SetWatcherAlive(fc.Source, false)
+						}
+					} else if fc.Stats != nil {
+						fc.Stats.SetWatcherAlive(fc.Source, true)
 					}
 					continue
 				}
 
-				//Line Handling
 				if event.Op&fsnotify.Write == fsnotify.Write {
 					for {
 						chunk, err := reader.ReadString('\n')
@@ -71,24 +85,33 @@ func (fc *FileCollector) Start(out chan<- RawLog) error {
 						lines := strings.Split(buffer, "\n")
 
 						for i := 0; i < len(lines)-1; i++ {
+							line := lines[i]
+
 							out <- RawLog{
 								Source:  fc.Source,
-								Message: lines[i],
+								Message: line,
+							}
+
+							if fc.Stats != nil {
+								fc.Stats.RecordLine(fc.Source)
 							}
 
 							if fc.Broadcaster != nil {
-								fc.Broadcaster.Publish(lines[i])
+								// Change 3: pass source tag alongside the line so the
+								// SSE stream and live.html can colour by source.
+								fc.Broadcaster.Publish(fc.Source, line)
 							}
 						}
 
 						buffer = lines[len(lines)-1]
-
 					}
 				}
 
-			case err := <-watcher.Errors:
-				log.Println("watch error:", err)
-
+			case watchErr := <-watcher.Errors:
+				log.Println("watch error:", watchErr)
+				if fc.Stats != nil {
+					fc.Stats.SetWatcherAlive(fc.Source, false)
+				}
 			}
 		}
 	}()
@@ -101,7 +124,6 @@ func openFile(path string) (*os.File, *bufio.Reader, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-
 	f.Seek(0, io.SeekEnd)
 	return f, bufio.NewReader(f), nil
 }

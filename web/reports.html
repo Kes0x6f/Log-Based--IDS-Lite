@@ -216,7 +216,8 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
 <script>
 const el=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-const tick=()=>{const s=new Date().toUTCString().slice(17,25)+' UTC';el('topbar-clock').textContent=s;el('footer-time').textContent=s};
+function fmtClock(){const f=localStorage.getItem('ids-clock-fmt')||'utc';const n=new Date();if(f==='local24')return n.toLocaleTimeString('en-GB',{hour12:false})+' local';if(f==='local12')return n.toLocaleTimeString('en-US',{hour12:true})+' local';return n.toUTCString().slice(17,25)+' UTC';}
+const tick=()=>{const s=fmtClock();el('topbar-clock').textContent=s;el('footer-time').textContent=s};
 setInterval(tick,1000);tick();
 const SEV_ORD={CRITICAL:4,HIGH:3,MEDIUM:2,LOW:1};
 const SEV_COLOR={CRITICAL:'#f87171',HIGH:'#fb923c',MEDIUM:'#fbbf24',LOW:'#34d399'};
@@ -224,11 +225,27 @@ const CATCOLORS=['#38bdf8','#7c6ddd','#fb923c','#f87171','#34d399','#f472b6','#f
 const pill=sev=>`<span class="pill pill-${(sev||'').toLowerCase()}">${esc(sev)}</span>`;
 const fmtAge=ts=>{const d=Date.now()-new Date(ts);if(d<60000)return Math.floor(d/1000)+'s ago';if(d<3600000)return Math.floor(d/60000)+'m ago';if(d<86400000)return Math.floor(d/3600000)+'h ago';return Math.floor(d/86400000)+'d ago'};
 let allAlerts=[],volChart=null,sevChart=null;
+const LIMIT = parseInt(localStorage.getItem('ids-alerts-limit') || '2000');
+async function updateCriticalBadge() {
+  try {
+    const r = await fetch('/alerts/severity-count?severity=CRITICAL');
+    if (!r.ok) return;
 
+    const data = await r.json();
+    const badge = document.getElementById('nav-crit');
+
+    if (badge) {
+      badge.textContent = data.count > 0 ? data.count : '—';
+    }
+  } catch {
+    const badge = document.getElementById('nav-crit');
+    if (badge) badge.textContent = '—';
+  }
+}
 async function load(){
   const windowMs=+el('f-window').value;
   const cutoff=windowMs>0?Date.now()-windowMs:0;
-  try{const r=await fetch('/alerts?limit=2000');allAlerts=r.ok?(await r.json()??[]):[];}catch{}
+  try{const r=await fetch(`/alerts?limit=${LIMIT}`);allAlerts=r.ok?(await r.json()??[]):[];}catch{}
   const alerts=cutoff?allAlerts.filter(a=>new Date(a.Timestamp)>=cutoff):allAlerts;
 
   const windowLabels={86400000:'last 24 h',604800000:'last 7 days',2592000000:'last 30 days',0:'all time'};
@@ -313,7 +330,7 @@ async function load(){
     <td style="font-size:10px;color:var(--text-3)">${fmtAge(r.last)}</td>
   </tr>`).join('');
 
-  const nb=el('nav-crit');if(nb)nb.textContent=crit||'—';
+  updateCriticalBadge();
 }
 
 function exportCSV(){
@@ -328,6 +345,10 @@ function exportCSV(){
   a.download='ids-report-'+new Date().toISOString().slice(0,10)+'.csv';
   a.click();
 }
+
+
+updateCriticalBadge();
+setInterval(updateCriticalBadge, 15000);
 
 load();
 setInterval(load,30000);

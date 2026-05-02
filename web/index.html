@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>IDS — Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -619,10 +620,21 @@ let logLines  = [];
 let autoScroll = true;
 
 // ── Clock ────────────────────────────────────────────────────────────
+function fmtClock() {
+  const fmt = localStorage.getItem('ids-clock-fmt') || 'utc';
+  const now = new Date();
+  if (fmt === 'local24') {
+    return now.toLocaleTimeString('en-GB', {hour12: false}) + ' local';
+  } else if (fmt === 'local12') {
+    return now.toLocaleTimeString('en-US', {hour12: true}) + ' local';
+  }
+  // default: utc
+  return now.toUTCString().slice(17, 25) + ' UTC';
+}
 function tickClock() {
-  const s = new Date().toUTCString().slice(17, 25);
-  document.getElementById('topbar-clock').textContent = s + ' UTC';
-  document.getElementById('footer-time').textContent  = s + ' UTC';
+  const s = fmtClock();
+  document.getElementById('topbar-clock').textContent = s;
+  document.getElementById('footer-time').textContent  = s;
 }
 setInterval(tickClock, 1000);
 tickClock();
@@ -673,11 +685,9 @@ async function refreshCards() {
   if (H != null) sub('c-high-sub', H > 0 ? 'review needed'  : 'all clear', H > 0 ? '' : 'ok');
 
   const navBadge = document.getElementById('nav-crit');
-  if (navBadge) navBadge.textContent = C ?? '—';
+  if (navBadge) navBadge.textContent = (C != null && C > 0) ? C : '—';
 
-  const now = new Date();
-  document.getElementById('refresh-ts').textContent =
-    'updated ' + now.toLocaleTimeString('en-GB',{hour12:false});
+  document.getElementById('refresh-ts').textContent = 'updated ' + fmtClock();
 
   updateSevChart(C, H, M, L);
 }
@@ -726,7 +736,7 @@ async function refreshAlerts() {
   if (!Array.isArray(data)) return;
   allAlerts = data;
 
-  renderTable(allAlerts.slice(0, 12));
+  renderTable(allAlerts.slice(0, parseInt(localStorage.getItem('ids-dash-rows') || '12')));
   renderTimeline(allAlerts);
   renderCategories(allAlerts);
   renderTopIPs(allAlerts);
@@ -740,26 +750,36 @@ function renderTable(alerts) {
   if (!alerts?.length) {
     tbody.innerHTML = '<tr><td colspan="7" class="empty">no alerts yet</td></tr>'; return;
   }
-  tbody.innerHTML = alerts.map(a => `<tr>
-    <td class="mono">${fmtTime(a.Timestamp)}</td>
-    <td>${pill(a.Severity)}</td>
-    <td class="rule">${esc(a.RuleName||'—')}</td>
-    <td class="mono">${esc(a.SourceIP||'—')}</td>
-    <td class="mono">${esc(a.Username||'—')}</td>
-    <td class="msg" title="${esc(a.Message||'')}">${esc(a.Message||'—')}</td>
-    <td class="cnt">${a.EventCount||1}</td>
-  </tr>`).join('');
+  tbody.innerHTML = alerts.map(a => {
+    const detailUrl = `/alert-detail.html?id=${encodeURIComponent(a.ID)}`;
+    return `<tr onclick="location.href='${detailUrl}'" style="cursor:pointer">
+      <td class="mono">${fmtTime(a.Timestamp)}</td>
+      <td>${pill(a.Severity)}</td>
+      <td class="rule"><a href="${detailUrl}" style="color:inherit;text-decoration:none">${esc(a.RuleName||'—')}</a></td>
+      <td class="mono">${esc(a.SourceIP||'—')}</td>
+      <td class="mono">${esc(a.Username||'—')}</td>
+      <td class="msg" title="${esc(a.Message||'')}">${esc(a.Message||'—')}</td>
+      <td class="cnt">${a.EventCount||1}</td>
+    </tr>`;
+  }).join('');
 }
 
 // ── Timeline ─────────────────────────────────────────────────────────
 function renderTimeline(alerts) {
-  const bins = new Array(24).fill(0);
+  // Read bucket size from settings (1, 2, or 4 hours); default 1.
+  const bucketHrs = parseInt(localStorage.getItem('ids-timeline-bucket') || '1');
+  const totalBuckets = Math.ceil(24 / bucketHrs);
+  const bucketMs = bucketHrs * 3600000;
+  const bins = new Array(totalBuckets).fill(0);
   const now  = Date.now();
   alerts.forEach(a => {
-    const h = Math.floor((now - new Date(a.Timestamp)) / 3600000);
-    if (h >= 0 && h < 24) bins[23 - h]++;
+    const b = Math.floor((now - new Date(a.Timestamp)) / bucketMs);
+    if (b >= 0 && b < totalBuckets) bins[totalBuckets - 1 - b]++;
   });
-  const labels = bins.map((_,i) => { const h=23-i; return h===0?'now':`-${h}h`; });
+  const labels = bins.map((_, i) => {
+    const ago = (totalBuckets - 1 - i) * bucketHrs;
+    return ago === 0 ? 'now' : `-${ago}h`;
+  });
   const gc = 'rgba(96,130,200,0.07)', tc = '#3d5070';
 
   if (!timeChart) {
@@ -788,7 +808,7 @@ function renderTimeline(alerts) {
     timeChart.data.datasets[0].data = bins;
     timeChart.update('none');
   }
-  document.getElementById('timeline-meta').textContent = `${alerts.length} events · 24 h window`;
+  document.getElementById('timeline-meta').textContent = `${alerts.length} events · 24 h window · ${bucketHrs}h buckets`;
 }
 
 // ── Categories ────────────────────────────────────────────────────────
@@ -819,9 +839,9 @@ function renderTopIPs(alerts) {
   const el = document.getElementById('ip-list');
   if (!el) return;
   el.innerHTML = sorted.length ? sorted.map(([ip,n],i) =>
-    `<div class="ip-row">
+    `<div class="ip-row" style="cursor:pointer" onclick="location.href='/ip-profile.html?ip=${encodeURIComponent(ip)}'">
       <span class="ip-rank">${i+1}</span>
-      <span class="ip-addr" title="${esc(ip)}">${esc(ip)}</span>
+      <span class="ip-addr" title="${esc(ip)}" style="color:var(--accent)">${esc(ip)}</span>
       <div class="ip-bbar"><div class="ip-bfill" style="width:${Math.round(n/max*100)}%"></div></div>
       <span class="ip-n">${n}</span>
     </div>`).join('') : '<div class="empty">no IP data</div>';
@@ -836,14 +856,16 @@ function renderTopRules(alerts) {
   const el = document.getElementById('rules-list');
   if (!el) return;
   el.innerHTML = sorted.length ? sorted.map(([n,v]) =>
-    `<div class="rule-row">
-      <span class="rule-name">${esc(n)}</span>
+    `<div class="rule-row" style="cursor:pointer" onclick="location.href='/alerts.html?rule=${encodeURIComponent(n)}'">
+      <span class="rule-name" style="color:var(--text)">${esc(n)}</span>
       <span class="rule-n">${v}</span>
     </div>`).join('') : '<div class="empty">no data</div>';
 }
 
 // ── SSE live log stream ───────────────────────────────────────────────
-const MAX_LINES = 400;
+// Read buffer limit from settings (same key as live.html uses).
+const MAX_LINES = parseInt(localStorage.getItem('ids-log-buffer') || '400');
+const SSE_RECONNECT = parseInt(localStorage.getItem('ids-log-reconnect') || '3000');
 
 function logClass(line) {
   const l = line.toLowerCase();
@@ -857,11 +879,15 @@ function logClass(line) {
 function connectSSE() {
   const es = new EventSource('/stream/logs');
   es.onmessage = e => {
-    logLines.push(e.data);
+    // Backend sends "source|line" — strip the source prefix before display.
+    const raw = e.data;
+    const pipeIdx = raw.indexOf('|');
+    const line = pipeIdx > -1 ? raw.slice(pipeIdx + 1) : raw;
+    logLines.push(line);
     if (logLines.length > MAX_LINES) logLines.shift();
     filterLogs();
   };
-  es.onerror = () => { es.close(); setTimeout(connectSSE, 3000); };
+  es.onerror = () => { es.close(); setTimeout(connectSSE, SSE_RECONNECT); };
 }
 
 function filterLogs() {
@@ -890,8 +916,12 @@ async function refreshAll() {
 refreshAll();
 connectSSE();
 
-setInterval(refreshCards, 10000);   // counts every 10 s
-setInterval(refreshAlerts, 15000);  // chart/table data every 15 s
+// Read refresh intervals from Settings page localStorage values (with defaults).
+const _cardMs  = parseInt(localStorage.getItem('ids-card-refresh')  || '10000');
+const _chartMs = parseInt(localStorage.getItem('ids-chart-refresh') || '15000');
+
+setInterval(refreshCards, _cardMs);    // counts
+setInterval(refreshAlerts, _chartMs);  // chart/table data
 </script>
 </body>
 </html>

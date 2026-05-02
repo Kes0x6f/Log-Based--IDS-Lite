@@ -387,7 +387,8 @@ let timeChart = null;
 let currentIP = '';
 
 // ── Clock ──
-function tickClock(){const s=new Date().toUTCString().slice(17,25)+' UTC';document.getElementById('topbar-clock').textContent=s;document.getElementById('footer-time').textContent=s;}
+function fmtClock(){const f=localStorage.getItem('ids-clock-fmt')||'utc';const n=new Date();if(f==='local24')return n.toLocaleTimeString('en-GB',{hour12:false})+' local';if(f==='local12')return n.toLocaleTimeString('en-US',{hour12:true})+' local';return n.toUTCString().slice(17,25)+' UTC';}
+function tickClock(){const s=fmtClock();document.getElementById('topbar-clock').textContent=s;document.getElementById('footer-time').textContent=s;}
 setInterval(tickClock,1000);tickClock();
 
 const esc = s => String(s??'—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -395,6 +396,17 @@ const pill = sev => {const s=(sev||'').toLowerCase();return `<span class="pill p
 const fmtDt = ts => {const d=new Date(ts);return isNaN(d)?'—':d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour12:false});};
 const fmtDate = ts => {const d=new Date(ts);return isNaN(d)?'—':d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});};
 async function api(url){try{const r=await fetch(url);return r.ok?r.json():null;}catch{return null;}}
+
+// ── Critical badge with interval ──
+async function updateCriticalBadge() {
+  const d = await api('/alerts/severity-count?severity=CRITICAL');
+  const el = document.getElementById('nav-crit');
+  if (el && d) el.textContent = d.count > 0 ? d.count : '—';
+}
+updateCriticalBadge();
+setInterval(updateCriticalBadge, 15000);
+
+const LIMIT = parseInt(localStorage.getItem('ids-alerts-limit') || '2000');
 
 // ── Read IP from URL params on load ──
 window.addEventListener('DOMContentLoaded', () => {
@@ -404,11 +416,6 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('ip-input').value = ip;
     loadProfile(ip);
   }
-  // also load crit count for badge
-  api('/alerts/severity-count?severity=CRITICAL').then(d => {
-    const el = document.getElementById('nav-crit');
-    if(el && d) el.textContent = d.count;
-  });
 });
 
 function lookupIP() {
@@ -430,7 +437,7 @@ async function loadProfile(ip) {
   document.getElementById('profile-content').style.display = 'none';
   document.getElementById('empty-state').style.display     = 'none';
 
-  const data = await api(`/alerts?ip=${encodeURIComponent(ip)}&limit=2000`);
+  const data = await api(`/alerts?ip=${encodeURIComponent(ip)}&limit=${LIMIT}`);
 
   if (!data || !data.length) {
     document.getElementById('lookup-hint').textContent = `no alerts found for ${ip}`;

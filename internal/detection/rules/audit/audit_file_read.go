@@ -22,15 +22,17 @@ import (
 //	sudo ausearch -k read_sensitive | grep exe= | sort -u
 var trustedReaders = map[string]map[string]bool{
 	"/etc/shadow": {
-		"/usr/sbin/sshd":        true, // PAM auth
-		"/usr/bin/login":        true, // console login
-		"/usr/bin/sudo":         true, // PAM auth for sudo
-		"/usr/sbin/sudo":        true,
-		"/usr/bin/su":           true,
-		"/usr/sbin/su":          true,
-		"/usr/bin/passwd":       true, // password change
-		"/usr/sbin/unix_chkpwd": true, // PAM helper
-		"/sbin/unix_chkpwd":     true,
+		"/usr/sbin/sshd":                  true, // PAM auth
+		"/usr/bin/login":                  true, // console login
+		"/usr/bin/sudo":                   true, // PAM auth for sudo
+		"/usr/sbin/sudo":                  true,
+		"/usr/bin/su":                     true,
+		"/usr/sbin/su":                    true,
+		"/usr/bin/passwd":                 true, // password change
+		"/usr/sbin/unix_chkpwd":           true, // PAM helper
+		"/sbin/unix_chkpwd":               true,
+		"/usr/libexec/gdm-session-worker": true,
+		"/usr/sbin/cron":                  true,
 	},
 	"/etc/gshadow": {
 		"/usr/sbin/sshd":  true,

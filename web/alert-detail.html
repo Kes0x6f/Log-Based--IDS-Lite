@@ -222,7 +222,8 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
 <script>
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const el=id=>document.getElementById(id);
-const tick=()=>{const s=new Date().toUTCString().slice(17,25)+' UTC';el('topbar-clock').textContent=s;el('footer-time').textContent=s};
+function fmtClock(){const f=localStorage.getItem('ids-clock-fmt')||'utc';const n=new Date();if(f==='local24')return n.toLocaleTimeString('en-GB',{hour12:false})+' local';if(f==='local12')return n.toLocaleTimeString('en-US',{hour12:true})+' local';return n.toUTCString().slice(17,25)+' UTC';}
+const tick=()=>{const s=fmtClock();el('topbar-clock').textContent=s;el('footer-time').textContent=s};
 setInterval(tick,1000);tick();
 
 const SEV_COLOR={CRITICAL:'var(--red)',HIGH:'var(--orange)',MEDIUM:'var(--amber)',LOW:'var(--green)'};
@@ -230,25 +231,51 @@ const pill=sev=>`<span class="pill pill-${(sev||'low').toLowerCase()}">${esc(sev
 const fmtTs=ts=>{const d=new Date(ts);return isNaN(d)?'—':d.toLocaleString('en-GB',{hour12:false})};
 const fmtShort=ts=>{const d=new Date(ts);return isNaN(d)?'—':d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour12:false})};
 
+async function updateCriticalBadge() {
+  try {
+    const r = await fetch('/alerts/severity-count?severity=CRITICAL');
+    if (!r.ok) return;
+
+    const data = await r.json();
+    const badge = document.getElementById('nav-crit');
+
+    if (badge) {
+      badge.textContent = data.count > 0 ? data.count : '—';
+    }
+  } catch {
+    const badge = document.getElementById('nav-crit');
+    if (badge) badge.textContent = '—';
+  }
+}
+
+updateCriticalBadge();
+setInterval(updateCriticalBadge, 15000);
+
 async function load(){
   const params=new URLSearchParams(location.search);
   const targetID=params.get('id');
   if(!targetID){el('not-found').style.display='';return;}
 
-  let all=[];
-  try{const r=await fetch('/alerts?limit=2000');all=r.ok?(await r.json()??[]):[];}catch{}
-
-  const crit=all.filter(a=>a.Severity==='CRITICAL').length;
-  const nb=el('nav-crit');if(nb)nb.textContent=crit||'—';
-
-  // Find alert by ID (partial match friendly)
-  const alert=all.find(a=>a.ID===targetID)||(all.find(a=>a.ID?.includes(targetID)));
+  // Fetch only the single alert we need.
+  let alert=null;
+  try{
+    const r=await fetch(`/alerts/detail?id=${encodeURIComponent(targetID)}`);
+    if(r.ok) alert=await r.json();
+  }catch{}
   if(!alert){el('not-found').style.display='';return;}
 
-  // Prev/Next in the full list (sorted by time desc)
+  // Load recent window for prev/next navigation using the configured limit.
+  const navLimit=parseInt(localStorage.getItem('ids-alerts-limit')||'2000');
+  let all=[];
+  try{const r=await fetch(`/alerts?limit=${navLimit}`);all=r.ok?(await r.json()??[]):[];}catch{}
+
+  updateCriticalBadge();
+
+  // Prev/Next navigation within the recent window.
   const sorted=[...all].sort((a,b)=>new Date(b.Timestamp)-new Date(a.Timestamp));
   const idx=sorted.findIndex(a=>a.ID===alert.ID);
-  const prev=sorted[idx-1],next=sorted[idx+1];
+  const prev=idx>0?sorted[idx-1]:null;
+  const next=idx>=0&&idx<sorted.length-1?sorted[idx+1]:null;
   el('btn-prev').href=prev?`/alert-detail.html?id=${encodeURIComponent(prev.ID)}`:'#';
   el('btn-next').href=next?`/alert-detail.html?id=${encodeURIComponent(next.ID)}`:'#';
   if(!prev)el('btn-prev').style.opacity='0.35';
@@ -278,10 +305,13 @@ async function load(){
     ipLink.style.display='none';
   }
 
-  // Related alerts from same IP
+  // Change 2 — Related alerts from same IP: server-side filter, not bounded by the 200-row window.
   if(alert.SourceIP&&alert.SourceIP!=='-'&&alert.SourceIP!==''){
-    const related=all.filter(a=>a.SourceIP===alert.SourceIP&&a.ID!==alert.ID)
-      .sort((a,b)=>new Date(b.Timestamp)-new Date(a.Timestamp)).slice(0,10);
+    let related=[];
+    try{
+      const r=await fetch(`/alerts?ip=${encodeURIComponent(alert.SourceIP)}&limit=11`);
+      if(r.ok){const data=await r.json();related=(data??[]).filter(a=>a.ID!==alert.ID).slice(0,10);}
+    }catch{}
     if(related.length){
       el('panel-related').style.display='';
       el('related-tbody').innerHTML=related.map(a=>`<tr>
@@ -294,9 +324,12 @@ async function load(){
     }
   }
 
-  // Same rule history
-  const ruleHist=all.filter(a=>a.RuleName===alert.RuleName&&a.ID!==alert.ID)
-    .sort((a,b)=>new Date(b.Timestamp)-new Date(a.Timestamp)).slice(0,8);
+  // Same rule — server-filtered, not bounded by the nav window.
+  let ruleHist=[];
+  try{
+    const r=await fetch(`/alerts?rule=${encodeURIComponent(alert.RuleName)}&limit=9`);
+    if(r.ok){const data=await r.json();ruleHist=(data??[]).filter(a=>a.ID!==alert.ID).slice(0,8);}
+  }catch{}
   if(ruleHist.length){
     el('panel-rule-hist').style.display='';
     el('rule-hist-title').textContent=`Recent fires of "${alert.RuleName}"`;
@@ -316,6 +349,7 @@ function copyID(){
   const btn=event.target;const orig=btn.textContent;
   btn.textContent='copied!';setTimeout(()=>btn.textContent=orig,1200);
 }
+
 
 load();
 </script>

@@ -21,23 +21,20 @@ var isoHeaderRegex = regexp.MustCompile(
 )
 
 var programParsers = map[string]func(*model.NormalizedEvent) *model.NormalizedEvent{
-	//remote access
+	// Remote access
 	"sshd": parsers.SSHParser,
 
-	//escalated privilage abuse via sudo
+	// Privilege escalation
 	"sudo": parsers.SUDOParser,
+	"su":   parsers.SUParser,
 
-	// privilege escalation via su
-	"su": parsers.SUParser,
-
-	// account / group / credential events
+	// Account / group / credential events
 	"useradd": parsers.UserAddParser,
 	"userdel": parsers.UserDelParser,
 	"usermod": parsers.UserModParser,
 	"passwd":  parsers.PasswdParser,
 
-	// ── ufw.log + kern.log
-	// KernParser delegates UFW lines to UFWParser internally.
+	// Kernel (delegates UFW lines to UFWParser internally)
 	"kernel": parsers.KernParser,
 }
 
@@ -50,31 +47,32 @@ func ParserWorker(input <-chan collector.RawLog, output chan<- *model.Normalized
 	for log := range input {
 
 		line := strings.TrimSpace(log.Message)
+		if line == "" {
+			continue
+		}
 
 		// ── Fast path: raw audit.log lines ──────────────────────────────────
-		// Raw audit.log records start with "type=" and have no syslog header.
-		// The source tag "audit" is assigned by the FileCollector for this file.
+		// audit.log records start with "type=" and carry no syslog header.
 		if log.Source == "audit" && strings.HasPrefix(line, "type=") {
 			event := parsers.ParseRawAuditLine(line, log.Source)
 			if event != nil && event.EventType != "" {
-				fmt.Println(event)
 				output <- event
 			}
 			continue
 		}
 
-		// ── Fast path: Apache / Nginx access log lines ───────────────────────
-		// Combined Log Format starts with an IP address, not a syslog timestamp.
-		// Source tags "apache2" and "nginx" both arrive here.
+		// ── Fast path: Apache2 / Nginx access logs ───────────────────────────
+		// Combined Log Format has no syslog header; the header regex would not
+		// match and the line would be silently dropped without this branch.
 		if log.Source == "apache2" || log.Source == "nginx" {
 			event := parsers.ParseWebLogLine(line, log.Source)
 			if event != nil && event.EventType != "" {
-				fmt.Println(event)
 				output <- event
 			}
 			continue
 		}
 
+		// ── Standard syslog header path ──────────────────────────────────────
 		var matches []string
 		var timestampStr string
 
@@ -96,19 +94,13 @@ func ParserWorker(input <-chan collector.RawLog, output chan<- *model.Normalized
 		var err error
 
 		if strings.Contains(timestampStr, "T") {
-			// ISO format
 			timestamp, err = time.Parse(time.RFC3339Nano, timestampStr)
 		} else {
-			// syslog format
 			timestamp, err = parsetimestamp.ParseTimeStamp(timestampStr)
 		}
 
 		if err != nil {
-			continue
-		}
-
-		if err != nil {
-			fmt.Println("error in timestamp")
+			fmt.Println("timestamp parse error:", err)
 			continue
 		}
 
@@ -129,5 +121,4 @@ func ParserWorker(input <-chan collector.RawLog, output chan<- *model.Normalized
 
 		output <- event
 	}
-
 }

@@ -139,7 +139,7 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
     <div class="nav-label">Investigation</div>
     <a href="/ip-profile.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>IP Profile</a>
     <a href="/alert-detail.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Alert Detail</a>
-    <a href="/brute-force.html active" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Brute Force</a>
+    <a href="/brute-force.html" class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Brute Force</a>
     <a href="/timeline.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>Attack Timeline</a>
   </div>
   <div class="nav-section">
@@ -200,7 +200,8 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
 <script>
 const el=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-const tick=()=>{const s=new Date().toUTCString().slice(17,25)+' UTC';el('topbar-clock').textContent=s;el('footer-time').textContent=s};
+function fmtClock(){const f=localStorage.getItem('ids-clock-fmt')||'utc';const n=new Date();if(f==='local24')return n.toLocaleTimeString('en-GB',{hour12:false})+' local';if(f==='local12')return n.toLocaleTimeString('en-US',{hour12:true})+' local';return n.toUTCString().slice(17,25)+' UTC';}
+const tick=()=>{const s=fmtClock();el('topbar-clock').textContent=s;el('footer-time').textContent=s};
 setInterval(tick,1000);tick();
 const pill=sev=>`<span class="pill pill-${(sev||'').toLowerCase()}">${esc(sev)}</span>`;
 const fmtShort=ts=>{const d=new Date(ts);return isNaN(d)?'—':d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour12:false,second:undefined})};
@@ -216,11 +217,11 @@ const BRUTE_RULES=[
 const SUCCESS_RULES=['SSH Suspicious Login','SU Success After Failure','SUDO Success After Failure'];
 
 let allAlerts=[];
+const LIMIT = parseInt(localStorage.getItem('ids-alerts-limit') || '2000');
 
 async function load(){
-  try{const r=await fetch('/alerts?limit=2000');allAlerts=r.ok?(await r.json()??[]):[];}catch{allAlerts=[];}
-  const crit=allAlerts.filter(a=>a.Severity==='CRITICAL').length;
-  const nb=el('nav-crit');if(nb)nb.textContent=crit||'—';
+  try{const r=await fetch(`/alerts?limit=${LIMIT}`);allAlerts=r.ok?(await r.json()??[]):[];}catch{allAlerts=[];}
+  updateCriticalBadge();
   render();
 }
 
@@ -234,7 +235,11 @@ function render(){
   const brute=allAlerts.filter(a=>{
     if(!BRUTE_RULES.includes(a.RuleName))return false;
     if(cutoff&&new Date(a.Timestamp)<cutoff)return false;
-    if(typeFilter&&!a.RuleName.includes(typeFilter))return false;
+    // Exact-prefix match avoids 'SU' catching 'SUDO' rules
+    if(typeFilter){
+      if(typeFilter==='SU'&&!a.RuleName.startsWith('SU '))return false;
+      else if(typeFilter!=='SU'&&!a.RuleName.includes(typeFilter))return false;
+    }
     return true;
   });
 
@@ -326,6 +331,25 @@ function toggle(i){
   const open=body.classList.toggle('open');
   chev.classList.toggle('open',open);
 }
+async function updateCriticalBadge() {
+  try {
+    const r = await fetch('/alerts/severity-count?severity=CRITICAL');
+    if (!r.ok) return;
+
+    const data = await r.json();
+    const badge = document.getElementById('nav-crit');
+
+    if (badge) {
+      badge.textContent = data.count > 0 ? data.count : '—';
+    }
+  } catch {
+    const badge = document.getElementById('nav-crit');
+    if (badge) badge.textContent = '—';
+  }
+}
+
+updateCriticalBadge();
+setInterval(updateCriticalBadge, 15000);
 
 load();
 setInterval(load,20000);

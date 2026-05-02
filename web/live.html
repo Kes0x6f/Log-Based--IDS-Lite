@@ -36,15 +36,12 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
 .nav-item.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent);border-radius:0 2px 2px 0}
 .nav-item svg{width:13px;height:13px;flex-shrink:0}
 .nav-badge{margin-left:auto;font-size:9px;font-family:var(--font-mono);background:var(--red-dim);color:var(--red);padding:1px 6px;border-radius:8px;flex-shrink:0}
-.nav-chip{margin-left:auto;font-size:9px;font-family:var(--font-mono);color:var(--text-3);padding:1px 5px;border:1px solid var(--border);border-radius:4px}
 .sidebar-footer{margin-top:auto;padding:11px 14px;border-top:1px solid var(--border);flex-shrink:0}
 .footer-status{display:flex;align-items:center;gap:6px;margin-bottom:4px}
 .footer-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);animation:blink 2.4s infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
 .footer-txt{font-size:11px;color:var(--text-2);font-family:var(--font-mono)}
 .footer-time{font-size:10px;color:var(--text-3);font-family:var(--font-mono)}
-
-/* Main — full height layout */
 .main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;height:100vh;overflow:hidden}
 .topbar{height:50px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;z-index:5}
 .topbar-crumb{font-size:13px;font-weight:500;color:var(--text)}
@@ -56,8 +53,6 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
 .live-pill.paused{background:var(--amber-dim);border-color:rgba(251,191,36,.2)}
 .live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite}
 .live-dot.off{background:var(--amber);animation:none}
-
-/* Toolbar */
 .toolbar{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
 .t-input{background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:5px 10px;outline:none;transition:border-color .2s;flex:1;min-width:180px;max-width:320px}
 .t-input:focus{border-color:var(--accent)}
@@ -72,38 +67,31 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
 .t-sep{width:1px;height:20px;background:var(--border);flex-shrink:0}
 .t-stat{font-size:10px;font-family:var(--font-mono);color:var(--text-3);white-space:nowrap}
 .t-stat strong{color:var(--text-2)}
-
-/* Log area */
 .log-area{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
 .log-box{flex:1;overflow-y:auto;padding:10px 20px;font-family:var(--font-mono);font-size:11.5px;line-height:1.8;background:var(--bg);scrollbar-width:thin;scrollbar-color:var(--border-2) transparent}
 .log-box::-webkit-scrollbar{width:4px}
 .log-box::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:2px}
-
-/* Log line variants */
 .ll{display:flex;align-items:baseline;gap:10px;padding:1px 0;border-radius:2px}
 .ll:hover{background:rgba(96,130,200,0.04)}
 .ll-ts{color:var(--text-3);flex-shrink:0;font-size:10px;user-select:none;width:62px}
-.ll-src{flex-shrink:0;font-size:9px;padding:0 5px;border-radius:3px;font-weight:500;letter-spacing:.04em;user-select:none;min-width:46px;text-align:center;line-height:16px}
+.ll-src{flex-shrink:0;font-size:9px;padding:0 5px;border-radius:3px;font-weight:500;letter-spacing:.04em;user-select:none;min-width:54px;text-align:center;line-height:16px}
 .ll-msg{flex:1;word-break:break-all;white-space:pre-wrap}
-
-/* Source colours */
+/* Source badge colours — driven by the real source tag from the SSE stream */
 .src-auth  {background:rgba(96,165,250,.12);color:#60a5fa}
 .src-ufw   {background:rgba(52,211,153,.12);color:#34d399}
 .src-kern  {background:rgba(251,191,36,.12);color:#fbbf24}
 .src-audit {background:rgba(251,146,60,.12);color:#fb923c}
+.src-apache2{background:rgba(56,189,248,.12);color:#38bdf8}
+.src-nginx {background:rgba(56,189,248,.12);color:#38bdf8}
 .src-web   {background:rgba(56,189,248,.12);color:#38bdf8}
 .src-other {background:rgba(96,130,200,.1); color:#7a8cad}
-
 /* Message colours by content */
 .c-err  .ll-msg{color:#c77}
 .c-warn .ll-msg{color:#a8832e}
 .c-ok   .ll-msg{color:#4a9e7e}
 .c-info .ll-msg{color:#3d6e9c}
 .c-dim  .ll-msg{color:var(--text-3)}
-
 mark{background:rgba(251,191,36,.3);color:var(--amber);border-radius:2px;padding:0 1px}
-
-/* Status bar */
 .status-bar{height:26px;background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:16px;flex-shrink:0}
 .sb-item{font-size:10px;font-family:var(--font-mono);color:var(--text-3)}
 .sb-item strong{color:var(--text-2)}
@@ -111,8 +99,6 @@ mark{background:rgba(251,191,36,.3);color:var(--amber);border-radius:2px;padding
 .sb-green{background:var(--green)}
 .sb-red{background:var(--red)}
 .sb-amber{background:var(--amber)}
-
-/* Scroll-to-bottom FAB */
 .fab-down{position:absolute;right:24px;bottom:36px;background:var(--surface-3);border:1px solid var(--border-2);border-radius:20px;color:var(--text-2);font-family:var(--font-mono);font-size:11px;padding:5px 14px;cursor:pointer;transition:opacity .2s;display:none;z-index:4}
 .fab-down:hover{color:var(--text)}
 </style>
@@ -126,21 +112,10 @@ mark{background:rgba(251,191,36,.3);color:var(--amber);border-radius:2px;padding
   </div>
   <div class="nav-section">
     <div class="nav-label">Overview</div>
-    <a href="/" class="nav-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-      Dashboard
-    </a>
-    <a href="/alerts.html" class="nav-item">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      Alerts
-      <span class="nav-badge" id="nav-crit">—</span>
-    </a>
-    <a href="/live" class="nav-item active">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 010 8.49M7.76 16.24a6 6 0 010-8.49M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>
-      Live Logs
-    </a>
+    <a href="/" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Dashboard</a>
+    <a href="/alerts.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Alerts<span class="nav-badge" id="nav-crit">—</span></a>
+    <a href="/live" class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 010 8.49M7.76 16.24a6 6 0 010-8.49M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>Live Logs</a>
   </div>
-
   <div class="nav-section">
     <div class="nav-label">Investigation</div>
     <a href="/ip-profile.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>IP Profile</a>
@@ -155,12 +130,8 @@ mark{background:rgba(251,191,36,.3);color:var(--amber);border-radius:2px;padding
     <a href="/reports.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Reports</a>
     <a href="/settings.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 19.07a10 10 0 010-14.14"/></svg>Settings</a>
   </div>
-
   <div class="sidebar-footer">
-    <div class="footer-status">
-      <div class="footer-dot"></div>
-      <span class="footer-txt">system online</span>
-    </div>
+    <div class="footer-status"><div class="footer-dot"></div><span class="footer-txt">system online</span></div>
     <div class="footer-time" id="footer-time">--:--:-- UTC</div>
   </div>
 </nav>
@@ -176,6 +147,16 @@ mark{background:rgba(251,191,36,.3);color:var(--amber);border-radius:2px;padding
 
   <div class="toolbar">
     <input class="t-input" id="f-filter" type="text" placeholder="filter / highlight…" oninput="onFilter()">
+    <!-- Change 3: source filter — drives both client-side display and the SSE ?source= param -->
+    <select class="t-select" id="f-source" onchange="onSourceChange()">
+      <option value="">All sources</option>
+      <option value="auth">auth</option>
+      <option value="ufw">ufw</option>
+      <option value="kern">kern</option>
+      <option value="audit">audit</option>
+      <option value="apache2">apache2</option>
+      <option value="nginx">nginx</option>
+    </select>
     <select class="t-select" id="f-level" onchange="onFilter()">
       <option value="">All types</option>
       <option value="err">Errors / failures</option>
@@ -208,46 +189,39 @@ mark{background:rgba(251,191,36,.3);color:var(--amber);border-radius:2px;padding
 </div>
 
 <script>
-const MAX   = 2000;  // max lines kept
+const MAX   = parseInt(localStorage.getItem('ids-log-buffer') || '2000');
 const el    = id => document.getElementById(id);
 
-let lines     = [];  // {ts, src, msg, type} objects
+// Each stored line carries the real source tag from the SSE stream (Change 3).
+let lines     = [];
 let paused    = false;
-let autoScroll= true;
-let wordWrap  = true;
+let autoScroll= (localStorage.getItem('ids-log-autoscroll') ?? 'true') === 'true';
+let wordWrap  = (localStorage.getItem('ids-log-wrap')       ?? 'true') === 'true';
+const RECONNECT_DELAY = parseInt(localStorage.getItem('ids-log-reconnect') || '4000');
 let filterQ   = '';
 let filterLvl = '';
-let rateWindow= []; // timestamps for rate calc
+let filterSrc = '';  // Change 3: client-side source filter
+let rateWindow= [];
 let es        = null;
 let reconnectTimer = null;
 
 // ── Clock ──────────────────────────────────────────────────────────
+function fmtClock(){const f=localStorage.getItem('ids-clock-fmt')||'utc';const n=new Date();if(f==='local24')return n.toLocaleTimeString('en-GB',{hour12:false})+' local';if(f==='local12')return n.toLocaleTimeString('en-US',{hour12:true})+' local';return n.toUTCString().slice(17,25)+' UTC';}
 const tick = () => {
-  const s = new Date().toUTCString().slice(17,25)+' UTC';
+  const s = fmtClock();
   el('topbar-clock').textContent = s;
   el('footer-time').textContent  = s;
   el('sb-ts').textContent = s;
 };
 setInterval(tick, 1000); tick();
 
-// ── Classify line ──────────────────────────────────────────────────
+// ── Message type classifier (unchanged) ────────────────────────────
 function lineType(msg) {
-  const l = msg.toLowerCase();
   if (/failed|invalid user|\[ufw block\]|error|denied|refused|authentication failure|incorrect/i.test(msg)) return 'err';
   if (/disconnect|timeout|warn|refused|reset/i.test(msg)) return 'warn';
   if (/accepted|session opened|started|success/i.test(msg)) return 'ok';
   if (/\[ufw allow\]|info|listening|loaded/i.test(msg)) return 'info';
   return 'dim';
-}
-
-function inferSrc(msg) {
-  const l = msg.toLowerCase();
-  if (l.includes(' sshd') || l.includes(' sudo') || l.includes(' su ') || l.includes('useradd') || l.includes('passwd')) return 'auth';
-  if (l.includes('[ufw ')) return 'ufw';
-  if (l.includes('kernel') || l.includes('segfault') || l.includes('out of memory') || l.includes('module')) return 'kern';
-  if (l.includes('audit') || l.includes('auid=')) return 'audit';
-  if (l.includes('"get ') || l.includes('"post ') || l.includes('"head ') || l.includes('" 404') || l.includes('" 200')) return 'web';
-  return 'other';
 }
 
 // ── Render a single line to HTML ────────────────────────────────────
@@ -259,13 +233,14 @@ function highlight(msg, q) {
   return esc(msg).replace(re, m => `<mark>${m}</mark>`);
 }
 
+// Change 3: source is the real tag from the SSE stream, not a heuristic guess.
 function lineHTML(l) {
-  const src = inferSrc(l.msg);
-  const type = l.type;
-  const tsStr = l.ts ? l.ts.toLocaleTimeString('en-GB',{hour12:false}) : '';
+  const srcClass = 'src-' + (l.source || 'other');
+  const type     = l.type;
+  const tsStr    = l.ts ? l.ts.toLocaleTimeString('en-GB',{hour12:false}) : '';
   return `<div class="ll c-${type}">
     <span class="ll-ts">${tsStr}</span>
-    <span class="ll-src src-${src}">${src}</span>
+    <span class="ll-src ${srcClass}">${esc(l.source||'?')}</span>
     <span class="ll-msg">${highlight(l.msg, filterQ)}</span>
   </div>`;
 }
@@ -277,12 +252,20 @@ function onFilter() {
   rerender();
 }
 
+// Change 3: switching the source dropdown reconnects the SSE with the
+// ?source= filter so the server only streams the selected source.
+function onSourceChange() {
+  filterSrc = el('f-source').value;
+  reconnect();
+}
+
 function rerender() {
   const box = el('log-box');
   const fq  = filterQ.toLowerCase();
 
   const visible = lines.filter(l => {
     if (filterLvl && l.type !== filterLvl) return false;
+    if (filterSrc && l.source !== filterSrc) return false;
     if (fq && !l.msg.toLowerCase().includes(fq)) return false;
     return true;
   });
@@ -294,35 +277,35 @@ function rerender() {
 }
 
 // ── Append new line ─────────────────────────────────────────────────
-function appendLine(msg) {
+// Change 3: raw is now "source|line" from the backend.
+function appendLine(raw) {
   if (paused) return;
 
-  const l = {ts: new Date(), msg, type: lineType(msg)};
+  // Split on first "|" only — the log line itself may contain "|".
+  const pipeIdx = raw.indexOf('|');
+  const source  = pipeIdx > -1 ? raw.slice(0, pipeIdx) : 'other';
+  const msg     = pipeIdx > -1 ? raw.slice(pipeIdx + 1) : raw;
+
+  const l = {ts: new Date(), source, msg, type: lineType(msg)};
   lines.push(l);
   rateWindow.push(Date.now());
 
-  // Trim buffer
   if (lines.length > MAX) lines.shift();
 
-  // Rate window — keep only last 60 s
   const cutoff = Date.now() - 60000;
   rateWindow = rateWindow.filter(t => t > cutoff);
 
-  // Only re-render matching lines
+  // Skip rendering if filtered out.
   const fq = filterQ.toLowerCase();
-  if (filterLvl && l.type !== filterLvl) {
-    updateStats(); return;
-  }
-  if (fq && !l.msg.toLowerCase().includes(fq)) {
-    updateStats(); return;
-  }
+  if (filterLvl && l.type !== filterLvl)             { updateStats(); return; }
+  if (filterSrc && l.source !== filterSrc)           { updateStats(); return; }
+  if (fq && !l.msg.toLowerCase().includes(fq))       { updateStats(); return; }
 
   const box  = el('log-box');
   const node = document.createElement('div');
   node.innerHTML = lineHTML(l);
   box.appendChild(node.firstElementChild);
 
-  // Trim DOM if too large
   while (box.children.length > MAX) box.removeChild(box.firstChild);
 
   if (autoScroll) box.scrollTop = box.scrollHeight;
@@ -378,22 +361,49 @@ function scrollToBottom() {
   box.scrollTop = box.scrollHeight;
 }
 
-// ── Show/hide FAB when user scrolls up ─────────────────────────────
 el('log-box').addEventListener('scroll', function() {
   const atBottom = this.scrollHeight - this.scrollTop - this.clientHeight < 40;
   el('fab-down').style.display = atBottom ? 'none' : 'block';
-  if (!atBottom && autoScroll) { autoScroll = false; el('btn-scroll').className='t-btn'; el('btn-scroll').textContent='⇓ scroll off'; }
+  if (!atBottom && autoScroll) {
+    autoScroll = false;
+    el('btn-scroll').className='t-btn';
+    el('btn-scroll').textContent='⇓ scroll off';
+  }
 });
 
 // ── SSE connection ──────────────────────────────────────────────────
+// Change 3: append ?source= to the SSE URL when a source is selected so the
+// server only streams relevant lines to this client.
+function connect() {
+  if (es) { es.close(); es = null; }
+  setConnStatus('reconnecting');
+  const url = filterSrc ? `/stream/logs?source=${filterSrc}` : '/stream/logs';
+  es = new EventSource(url);
+  es.onopen = () => setConnStatus('connected');
+  es.onmessage = e => appendLine(e.data);
+  es.onerror = () => {
+    es.close(); es = null;
+    setConnStatus('disconnected');
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(connect, RECONNECT_DELAY);
+  };
+}
+
+// reconnect() is called when the source filter changes.
+function reconnect() {
+  clearTimeout(reconnectTimer);
+  connect();
+}
+
 function setConnStatus(state) {
   const dot  = el('sb-dot-conn');
   const txt  = el('sb-conn');
   const pill = el('live-pill');
   const ldot = el('live-dot');
   const lbl  = el('live-label');
+  const srcLabel = filterSrc ? ` [${filterSrc}]` : '';
   if (state === 'connected') {
-    dot.className='sb-dot sb-green'; txt.textContent='connected to /stream/logs';
+    dot.className='sb-dot sb-green'; txt.textContent='connected to /stream/logs' + srcLabel;
     pill.className='live-pill'; ldot.className='live-dot'; lbl.textContent='live';
   } else if (state === 'reconnecting') {
     dot.className='sb-dot sb-amber'; txt.textContent='reconnecting…';
@@ -402,20 +412,6 @@ function setConnStatus(state) {
     dot.className='sb-dot sb-red'; txt.textContent='disconnected — retrying';
     pill.className='live-pill paused'; ldot.className='live-dot off'; lbl.textContent='disconnected';
   }
-}
-
-function connect() {
-  if (es) { es.close(); es = null; }
-  setConnStatus('reconnecting');
-  es = new EventSource('/stream/logs');
-  es.onopen = () => setConnStatus('connected');
-  es.onmessage = e => appendLine(e.data);
-  es.onerror = () => {
-    es.close(); es = null;
-    setConnStatus('disconnected');
-    clearTimeout(reconnectTimer);
-    reconnectTimer = setTimeout(connect, 4000);
-  };
 }
 
 // ── Alert badge ─────────────────────────────────────────────────────
@@ -431,6 +427,16 @@ updateBadge();
 setInterval(updateBadge, 15000);
 
 connect();
+
+// Reflect the loaded settings in the UI controls immediately.
+(function applyInitialUI() {
+  const scrollBtn = el('btn-scroll');
+  if(scrollBtn){ scrollBtn.className='t-btn'+(autoScroll?' on':''); scrollBtn.textContent=autoScroll?'⇓ auto-scroll':'⇓ scroll off'; }
+  const logBox = el('log-box');
+  if(logBox && !wordWrap){ logBox.style.whiteSpace='nowrap'; }
+  const wrapBtn = el('btn-wrap');
+  if(wrapBtn){ wrapBtn.textContent=wordWrap?'↔ wrap':'↔ no-wrap'; }
+})();
 </script>
 </body>
 </html>

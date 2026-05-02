@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"time"
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 )
@@ -34,6 +35,27 @@ func (r *AlertRepository) Insert(alert *model.Alert) error {
 	return err
 }
 
+// GetByID returns a single alert by its exact ID, or (nil, nil) when not found.
+// Enables the alert-detail page to fetch one row instead of scanning 2000.
+func (r *AlertRepository) GetByID(id string) (*model.Alert, error) {
+	query := `
+	SELECT id, timestamp, rule_name, severity, category,
+	       message, source_ip, username, host, event_count
+	FROM alerts
+	WHERE id = ?
+	`
+
+	var a model.Alert
+	err := r.DB.QueryRow(query, id).Scan(
+		&a.ID, &a.Timestamp, &a.RuleName, &a.Severity, &a.Category,
+		&a.Message, &a.SourceIP, &a.Username, &a.Host, &a.EventCount,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return &a, err
+}
+
 func (r *AlertRepository) GetRecent(limit int) ([]model.Alert, error) {
 	query := `
 	SELECT id, timestamp, rule_name, severity, category,
@@ -49,33 +71,11 @@ func (r *AlertRepository) GetRecent(limit int) ([]model.Alert, error) {
 	}
 	defer rows.Close()
 
-	var alerts []model.Alert
-
-	for rows.Next() {
-		var a model.Alert
-		err := rows.Scan(
-			&a.ID,
-			&a.Timestamp,
-			&a.RuleName,
-			&a.Severity,
-			&a.Category,
-			&a.Message,
-			&a.SourceIP,
-			&a.Username,
-			&a.Host,
-			&a.EventCount,
-		)
-		if err != nil {
-			return nil, err
-		}
-		alerts = append(alerts, a)
-	}
-
-	return alerts, nil
+	return scanAlerts(rows)
 }
 
-func (r *AlertRepository) GetAlerts(ip, severity string, limit int) ([]model.Alert, error) {
-
+// GetAlerts filters by ip, severity, category, rule, and/or since.
+func (r *AlertRepository) GetAlerts(ip, severity, category, rule, since string, limit int) ([]model.Alert, error) {
 	query := `
 	SELECT id, timestamp, rule_name, severity, category,
 	       message, source_ip, username, host, event_count
@@ -95,6 +95,24 @@ func (r *AlertRepository) GetAlerts(ip, severity string, limit int) ([]model.Ale
 		args = append(args, severity)
 	}
 
+	if category != "" {
+		query += " AND category = ?"
+		args = append(args, category)
+	}
+
+	if rule != "" {
+		query += " AND rule_name = ?"
+		args = append(args, rule)
+	}
+
+	if since != "" {
+		t, err := time.Parse(time.RFC3339, since)
+		if err == nil {
+			query += " AND timestamp >= ?"
+			args = append(args, t)
+		}
+	}
+
 	query += " ORDER BY timestamp DESC"
 
 	if limit > 0 {
@@ -108,57 +126,87 @@ func (r *AlertRepository) GetAlerts(ip, severity string, limit int) ([]model.Ale
 	}
 	defer rows.Close()
 
-	var alerts []model.Alert
+	return scanAlerts(rows)
+}
 
+func (r *AlertRepository) CountAlerts() (int, error) {
+	var count int
+	err := r.DB.QueryRow(`SELECT COUNT(*) FROM alerts`).Scan(&count)
+	return count, err
+}
+
+func (r *AlertRepository) CountBySeverity(severity string) (int, error) {
+	var count int
+	err := r.DB.QueryRow(`SELECT COUNT(*) FROM alerts WHERE severity = ?`, severity).Scan(&count)
+	return count, err
+}
+
+func (r *AlertRepository) CountUniqueIPs() (int, error) {
+	var count int
+	err := r.DB.QueryRow(`SELECT COUNT(DISTINCT source_ip) FROM alerts WHERE source_ip != ''`).Scan(&count)
+	return count, err
+}
+
+func (r *AlertRepository) UpdateEventCount(id string, count int) error {
+	_, err := r.DB.Exec(`UPDATE alerts SET event_count = ? WHERE id = ?`, count, id)
+	return err
+}
+
+// PruneOldestN deletes the N oldest alerts by timestamp.
+// Used by the max-rows cap enforcement in Manager.
+func (r *AlertRepository) PruneOldestN(n int64) (int64, error) {
+	res, err := r.DB.Exec(`
+		DELETE FROM alerts WHERE id IN (
+			SELECT id FROM alerts ORDER BY timestamp ASC LIMIT ?
+		)`, n)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// CountOlderThan returns the number of alerts with a timestamp before `before`.
+// Powers the GET /alerts/count-before endpoint used by the Settings prune check.
+func (r *AlertRepository) CountOlderThan(before time.Time) (int64, error) {
+	var count int64
+	err := r.DB.QueryRow(`SELECT COUNT(*) FROM alerts WHERE timestamp < ?`, before).Scan(&count)
+	return count, err
+}
+
+// PruneOlderThan deletes all alerts with a timestamp before `before` and
+// returns the number of rows deleted.
+// Change 6: powers the DELETE /alerts/prune endpoint used by the Settings page.
+func (r *AlertRepository) PruneOlderThan(before time.Time) (int64, error) {
+	res, err := r.DB.Exec(`DELETE FROM alerts WHERE timestamp < ?`, before)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// DeleteAll removes every alert from the database.
+// Powers the DELETE /alerts/all endpoint used by the Settings danger-zone.
+func (r *AlertRepository) DeleteAll() (int64, error) {
+	res, err := r.DB.Exec(`DELETE FROM alerts`)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// scanAlerts is a shared helper that scans a *sql.Rows result into []model.Alert.
+func scanAlerts(rows *sql.Rows) ([]model.Alert, error) {
+	var alerts []model.Alert
 	for rows.Next() {
 		var a model.Alert
 		err := rows.Scan(
-			&a.ID,
-			&a.Timestamp,
-			&a.RuleName,
-			&a.Severity,
-			&a.Category,
-			&a.Message,
-			&a.SourceIP,
-			&a.Username,
-			&a.Host,
-			&a.EventCount,
+			&a.ID, &a.Timestamp, &a.RuleName, &a.Severity, &a.Category,
+			&a.Message, &a.SourceIP, &a.Username, &a.Host, &a.EventCount,
 		)
 		if err != nil {
 			return nil, err
 		}
 		alerts = append(alerts, a)
 	}
-
-	return alerts, nil
-}
-
-func (r *AlertRepository) CountAlerts() (int, error) {
-	query := `SELECT COUNT(*) FROM alerts`
-
-	var count int
-	err := r.DB.QueryRow(query).Scan(&count)
-	return count, err
-}
-
-func (r *AlertRepository) CountBySeverity(severity string) (int, error) {
-	query := `SELECT COUNT(*) FROM alerts WHERE severity = ?`
-
-	var count int
-	err := r.DB.QueryRow(query, severity).Scan(&count)
-	return count, err
-}
-
-func (r *AlertRepository) CountUniqueIPs() (int, error) {
-	query := `SELECT COUNT(DISTINCT source_ip) FROM alerts WHERE source_ip != ''`
-
-	var count int
-	err := r.DB.QueryRow(query).Scan(&count)
-	return count, err
-}
-
-func (r *AlertRepository) UpdateEventCount(id string, count int) error {
-	query := `UPDATE alerts SET event_count = ? WHERE id = ?`
-	_, err := r.DB.Exec(query, count, id)
-	return err
+	return alerts, rows.Err()
 }

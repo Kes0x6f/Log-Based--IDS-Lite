@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>IDS — Rules Manager</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -173,22 +174,22 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
     <div class="scards">
       <div class="sc" style="--c:var(--accent)">
         <div class="sc-lbl">Total Rules</div>
-        <div class="sc-val" id="sc-total">40</div>
+        <div class="sc-val" id="sc-total">—</div>
         <div class="sc-sub">registered</div>
       </div>
       <div class="sc" style="--c:var(--green)">
         <div class="sc-lbl">Triggered Today</div>
         <div class="sc-val" id="sc-triggered">—</div>
-        <div class="sc-sub">distinct rules</div>
+        <div class="sc-sub">distinct rules · last 24 h</div>
       </div>
       <div class="sc" style="--c:var(--red)">
         <div class="sc-lbl">Critical Rules</div>
-        <div class="sc-val" id="sc-crit">8</div>
+        <div class="sc-val" id="sc-crit">—</div>
         <div class="sc-sub">max severity</div>
       </div>
       <div class="sc" style="--c:var(--amber)">
         <div class="sc-lbl">High Rules</div>
-        <div class="sc-val" id="sc-high">18</div>
+        <div class="sc-val" id="sc-high">—</div>
         <div class="sc-sub">max severity</div>
       </div>
       <div class="sc" style="--c:var(--purple)">
@@ -215,6 +216,7 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
         <option value="HIGH">High</option>
         <option value="MEDIUM">Medium</option>
         <option value="LOW">Low</option>
+        <option value="varies">Varies (dynamic)</option>
       </select>
       <select class="f-select" id="f-sort" onchange="render()">
         <option value="fires">Sort: most fired</option>
@@ -289,10 +291,21 @@ const SEV_ORD = {CRITICAL:4,HIGH:3,MEDIUM:2,LOW:1,varies:0};
 
 // ── Live data from /alerts ──────────────────────────────────────────
 let fireCounts = {}, lastFired = {}, alertData = [];
+const LIMIT = parseInt(localStorage.getItem('ids-alerts-limit') || '2000');
+
+async function updateCriticalBadge() {
+  try {
+    const r = await fetch('/alerts/severity-count?severity=CRITICAL');
+    if (!r.ok) return;
+    const d = await r.json();
+    const nb = el('nav-crit');
+    if (nb) nb.textContent = d.count > 0 ? d.count : '—';
+  } catch {}
+}
 
 async function loadAlerts() {
   try {
-    const r = await fetch('/alerts?limit=2000');
+    const r = await fetch(`/alerts?limit=${LIMIT}`);
     alertData = r.ok ? (await r.json() ?? []) : [];
   } catch { alertData = []; }
 
@@ -305,15 +318,20 @@ async function loadAlerts() {
     if (!lastFired[n] || t > lastFired[n]) lastFired[n] = t;
   });
 
-  // Summary cards
-  const triggered = RULES.filter(r => fireCounts[r.name] > 0).length;
+  // "Triggered Today" — count rules that fired in the last 24 hours only.
+  const since24h = Date.now() - 86400000;
+  const triggeredToday = new Set(
+    alertData
+      .filter(a => a.RuleName && new Date(a.Timestamp) >= since24h)
+      .map(a => a.RuleName)
+  ).size;
+  el('sc-triggered').textContent = triggeredToday;
+
+  // Alert categories from loaded data.
   const cats = new Set(alertData.map(a => a.Category).filter(Boolean)).size;
-  el('sc-triggered').textContent = triggered;
   el('sc-cats').textContent = cats || '—';
 
-  const nb = el('nav-crit');
-  if (nb) nb.textContent = alertData.filter(a=>a.Severity==='CRITICAL').length || '—';
-
+  updateCriticalBadge();
   render();
 }
 
@@ -323,6 +341,11 @@ const pill = sev => {
   if (sev === 'varies') return `<span class="pill" style="background:var(--surface-3);color:var(--text-3)">varies</span>`;
   return `<span class="pill pill-${sev.toLowerCase()}">${esc(sev)}</span>`;
 };
+
+// Compute static card values from the RULES array — safe now that el() is defined.
+el('sc-total').textContent = RULES.length;
+el('sc-crit').textContent  = RULES.filter(r => r.sev === 'CRITICAL').length;
+el('sc-high').textContent  = RULES.filter(r => r.sev === 'HIGH').length;
 
 function fmtLast(d) {
   if (!d) return 'never';
@@ -376,8 +399,9 @@ function render() {
     const last  = lastFired[r.name];
     const barW  = Math.round(fires / maxFires * 100);
     const barColor = fires > 0 ? (srcColors[r.src] || 'var(--accent)') : 'var(--surface-3)';
+    const alertsURL = `/alerts.html?rule=${encodeURIComponent(r.name)}`;
 
-    return `<div class="rcard">
+    return `<div class="rcard" style="cursor:${fires>0?'pointer':'default'}" onclick="${fires>0?`location.href='${alertsURL}'`:''}">
       <div class="rcard-top">
         <div class="rcard-name">${esc(r.name)}</div>
         <div class="rcard-sev">${pill(r.sev)}</div>
@@ -397,8 +421,9 @@ function render() {
           <div class="rstat-lbl">Last fired</div>
           <div class="rstat-time">${fmtLast(last)}</div>
         </div>
-        <div class="fire-bar-wrap">
+        <div class="fire-bar-wrap" style="display:flex;flex-direction:column;justify-content:flex-end">
           <div class="fire-bar-bg"><div class="fire-bar-fill" style="width:${barW}%;background:${barColor}"></div></div>
+          ${fires>0?`<div style="text-align:right;margin-top:4px"><a href="${alertsURL}" onclick="event.stopPropagation()" style="font-size:9px;font-family:var(--font-mono);color:var(--accent);text-decoration:none">view alerts →</a></div>`:''}
         </div>
       </div>
     </div>`;
@@ -406,8 +431,9 @@ function render() {
 }
 
 // ── Clock ──────────────────────────────────────────────────────────
+function fmtClock(){const f=localStorage.getItem('ids-clock-fmt')||'utc';const n=new Date();if(f==='local24')return n.toLocaleTimeString('en-GB',{hour12:false})+' local';if(f==='local12')return n.toLocaleTimeString('en-US',{hour12:true})+' local';return n.toUTCString().slice(17,25)+' UTC';}
 const tick = () => {
-  const s = new Date().toUTCString().slice(17,25)+' UTC';
+  const s = fmtClock();
   el('topbar-clock').textContent = s;
   el('footer-time').textContent  = s;
 };
@@ -415,6 +441,7 @@ setInterval(tick,1000); tick();
 
 loadAlerts();
 setInterval(loadAlerts, 30000);
+setInterval(updateCriticalBadge, 15000);
 </script>
 </body>
 </html>

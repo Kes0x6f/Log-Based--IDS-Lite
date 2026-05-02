@@ -222,7 +222,7 @@ const SOURCES = [
     rules:['SSH Brute Force','SUDO Brute Force','SU Brute Force','New Account Created','Password Changed','Group Membership Changed','Distributed Brute Force']
   },
   {
-    key:'ufw', label:'UFW Firewall', path:'/var/log/ufw.log', icon:'🔥',
+    key:'ufw', label:'UFW Firewall', path:'UFW iptables deny chain', icon:'🔥',
     color:'var(--green)', iconBg:'var(--green-dim)',
     desc:'Kernel netfilter events for UFW BLOCK, ALLOW, and AUDIT actions.',
     parsers:['kernel/ufw'],
@@ -275,19 +275,27 @@ const PARSERS = [
 let alerts = [];
 const el = id => document.getElementById(id);
 const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const LIMIT = parseInt(localStorage.getItem('ids-alerts-limit') || '2000');
 
 async function load() {
   try {
-    const r = await fetch('/alerts?limit=2000');
+    const r = await fetch(`/alerts?limit=${LIMIT}`);
     alerts = r.ok ? (await r.json() ?? []) : [];
   } catch { alerts = []; }
 
+  // Change 4: fetch real collector statistics instead of guessing from alert timestamps.
+  let statusData = {};
+  try {
+    const r = await fetch('/sources/status');
+    if (r.ok) statusData = await r.json() ?? {};
+  } catch {}
+
   el('sc-total').textContent = alerts.length.toLocaleString();
 
-  // Per-source event counts from alert data
+  // Per-source event counts from alert data (category/rule heuristic kept for
+  // the alert-count breakdown which doesn't have a real-source tag in the DB).
   const bySrc = {};
   alerts.forEach(a => {
-    // Infer source from category/rule mappings
     const src = inferSource(a);
     bySrc[src] = (bySrc[src]||0)+1;
   });
@@ -298,22 +306,44 @@ async function load() {
     el('sc-busiest-n').textContent = busiest[1].toLocaleString() + ' events';
   }
 
-  // Critical badge
   const nb = el('nav-crit');
   if (nb) nb.textContent = alerts.filter(a=>a.Severity==='CRITICAL').length || '—';
 
-  renderSources(bySrc);
-  renderParsers(bySrc);
+  renderSources(bySrc, statusData);
+  renderParsers(bySrc, statusData);
 }
 
-// Infer log source from alert category/rule
+// Infer log source from alert category/rule name.
+// Operator precedence: && binds tighter than ||, so every OR branch is
+// wrapped in parens to make the logic explicit and avoid misclassification.
 function inferSource(a) {
   const rule = (a.RuleName||'').toLowerCase();
   const cat  = (a.Category||'').toLowerCase();
-  if (cat === 'rootkit' || cat === 'stability' || cat === 'hardware' || rule.includes('kernel') || rule.includes('segfault') || rule.includes('oom') || rule.includes('disk')) return 'kern';
-  if (rule.includes('ufw') || cat === 'dos' || cat === 'c2' || cat === 'reconnaissance' && rule.includes('ufw')) return 'ufw';
-  if (rule.includes('audit') || cat === 'credential-access' || cat === 'tampering' || cat === 'persistence' || cat === 'execution' || cat === 'privilege-escalation') return 'audit';
-  if (cat === 'web-attack' || cat === 'web-probe' || rule.includes('web') || rule.includes('http')) return 'web';
+
+  // Web: must come before auth/audit because 'web login brute force' has
+  // category 'credential-access' which would otherwise fall into audit.
+  if (cat === 'web-attack' || cat === 'web-probe' ||
+      rule.startsWith('web ') || rule.includes('http') ||
+      rule === 'high request rate') return 'web';
+
+  // Kernel (non-UFW)
+  if (cat === 'rootkit' || cat === 'stability' || cat === 'hardware' ||
+      cat === 'exploitation' && (rule.includes('segfault') || rule.includes('kernel')) ||
+      rule === 'kernel module load' || rule === 'sensitive binary segfault' ||
+      rule === 'oom kill detected' || rule === 'disk i/o errors detected') return 'kern';
+
+  // UFW / firewall
+  if (rule.startsWith('ufw ') ||
+      (cat === 'dos' && !rule.includes('web') && !rule.includes('http')) ||
+      cat === 'c2' ||
+      (cat === 'reconnaissance' && rule.startsWith('ufw '))) return 'ufw';
+
+  // Auditd
+  if (cat === 'tampering' || cat === 'persistence' ||
+      cat === 'privilege-escalation' || cat === 'execution' ||
+      rule === 'sensitive file read' || rule === 'sensitive file modified') return 'audit';
+
+  // Default: auth (SSH, sudo, su, account events)
   return 'auth';
 }
 
@@ -341,11 +371,12 @@ function sparkHTML(src) {
   }).join('');
 }
 
-function renderSources(bySrc) {
+function renderSources(bySrc, statusData) {
   const grid = el('sources-grid');
   const maxEvents = Math.max(1, ...Object.values(bySrc));
 
-  // Find last event per source
+  // Change 4: prefer real collector stats; fall back to alert-timestamp heuristics
+  // when the backend hasn't received any lines yet (e.g. log file empty).
   const lastBySrc = {};
   alerts.forEach(a => {
     const src = inferSource(a);
@@ -355,10 +386,24 @@ function renderSources(bySrc) {
 
   grid.innerHTML = SOURCES.map(s => {
     const count  = bySrc[s.key] || 0;
-    const last   = lastBySrc[s.key];
-    const age    = last ? (Date.now() - last) : Infinity;
-    const status = age < 300000 ? 'active' : age < 3600000 ? 'idle' : 'error';
-    const statusLabel = {active:'active',idle:'idle — quiet',error:'no recent events'}[status];
+
+    // Real stats from /sources/status take priority.
+    const realStat  = statusData[s.key];
+    const lastEventAt = realStat?.last_event_at
+      ? new Date(realStat.last_event_at)
+      : lastBySrc[s.key];
+    const watcherAlive = realStat ? realStat.watcher_alive : true;
+    const linesTotal   = realStat?.lines_total ?? null;
+
+    const age    = lastEventAt ? (Date.now() - lastEventAt) : Infinity;
+    // Use watcher_alive from the real stat when available; fall back to age heuristic.
+    let status;
+    if (realStat) {
+      status = !watcherAlive ? 'error' : age < 300000 ? 'active' : 'idle';
+    } else {
+      status = age < 300000 ? 'active' : age < 3600000 ? 'idle' : 'error';
+    }
+    const statusLabel = {active:'active',idle:'idle — quiet',error:'no recent events / watcher error'}[status];
 
     return `<div class="src-card">
       <div class="src-header">
@@ -374,16 +419,16 @@ function renderSources(bySrc) {
       <div class="src-body">
         <div class="src-stats-row">
           <div class="src-stat">
-            <div class="src-stat-lbl">Events</div>
+            <div class="src-stat-lbl">Alert Events</div>
             <div class="src-stat-val ${count===0?'dim':''}">${count.toLocaleString()}</div>
           </div>
           <div class="src-stat">
-            <div class="src-stat-lbl">Last event</div>
-            <div class="src-stat-val" style="font-size:12px">${fmtLast(last)}</div>
+            <div class="src-stat-lbl">Lines ingested</div>
+            <div class="src-stat-val ${linesTotal===null?'dim':''}">${linesTotal!==null?linesTotal.toLocaleString():'—'}</div>
           </div>
           <div class="src-stat">
-            <div class="src-stat-lbl">Parser</div>
-            <div class="src-stat-val" style="font-size:11px">${esc(s.parsers[0])}</div>
+            <div class="src-stat-lbl">Last event</div>
+            <div class="src-stat-val" style="font-size:12px">${fmtLast(lastEventAt)}</div>
           </div>
           <div class="src-stat">
             <div class="src-stat-lbl">Rules</div>
@@ -403,11 +448,9 @@ function renderSources(bySrc) {
   }).join('');
 }
 
-function renderParsers(bySrc) {
+function renderParsers(bySrc, statusData) {
   const tbody = el('parser-tbody');
-  const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  // Find last event per program
   const lastByProg = {};
   alerts.forEach(a => {
     const prog = a.Program || inferSource(a);
@@ -416,12 +459,17 @@ function renderParsers(bySrc) {
   });
 
   tbody.innerHTML = PARSERS.map(p => {
-    const src = p.src.split('/')[0];
+    const src    = p.src.split('/')[0];
     const events = bySrc[src] || 0;
-    const last = lastByProg[p.prog];
-    const age = last ? (Date.now() - last) : Infinity;
-    const hc = events > 0 ? 'ok' : age < 3600000 ? 'warn' : 'err';
-    const hl = {ok:'receiving events',warn:'quiet',err:'no data yet'}[hc];
+    const last   = lastByProg[p.prog];
+
+    // Change 4: use real watcher_alive flag where we have it.
+    const realStat   = statusData[src];
+    const alive      = realStat ? realStat.watcher_alive : true;
+    const age        = last ? (Date.now() - last) : Infinity;
+    const hc         = !alive ? 'err' : events > 0 ? 'ok' : age < 3600000 ? 'warn' : 'err';
+    const hl         = {ok:'receiving events', warn:'quiet', err: alive ? 'no data yet' : 'watcher error'}[hc];
+
     return `<tr>
       <td class="mono">${esc(p.src)}</td>
       <td class="mono">${esc(p.prog)}</td>
@@ -433,7 +481,8 @@ function renderParsers(bySrc) {
   }).join('');
 }
 
-const tick=()=>{const s=new Date().toUTCString().slice(17,25)+' UTC';el('topbar-clock').textContent=s;el('footer-time').textContent=s};
+function fmtClock(){const f=localStorage.getItem('ids-clock-fmt')||'utc';const n=new Date();if(f==='local24')return n.toLocaleTimeString('en-GB',{hour12:false})+' local';if(f==='local12')return n.toLocaleTimeString('en-US',{hour12:true})+' local';return n.toUTCString().slice(17,25)+' UTC';}
+const tick=()=>{const s=fmtClock();el('topbar-clock').textContent=s;el('footer-time').textContent=s};
 setInterval(tick,1000);tick();
 
 load();
