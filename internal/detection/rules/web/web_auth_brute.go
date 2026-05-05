@@ -25,8 +25,8 @@ type WebAuthBruteRule struct {
 
 func NewWebAuthBruteRule() *WebAuthBruteRule {
 	return &WebAuthBruteRule{
-		Threshold: 10,
-		Window:    2 * time.Minute,
+		Threshold: 5,
+		Window:    3 * time.Minute,
 		Cooldown:  10 * time.Minute,
 	}
 }

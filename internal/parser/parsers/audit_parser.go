@@ -21,10 +21,12 @@ var auditNameRe = regexp.MustCompile(`\bname="?([^"\s]+)"?`)
 var auditCommRe = regexp.MustCompile(`\bcomm="?([^"\s]+)"?`)
 var auditAuidRe = regexp.MustCompile(`\bauid=(\d+)`)
 var auditUidRe = regexp.MustCompile(`\buid=(\d+)`)
-var auditModeRe = regexp.MustCompile(`\bmode=(\d+)`)
-var auditCapPrmRe = regexp.MustCompile(`\bcap_prm=([0-9a-f]+)`)
-var auditCapEffRe = regexp.MustCompile(`\bcap_eff=([0-9a-f]+)`)
-
+var auditCapPrmRe = regexp.MustCompile(`\bcap_pp=([0-9a-f]+)`) // permitted set in CAPSET record
+var auditCapEffRe = regexp.MustCompile(`\bcap_pe=([0-9a-f]+)`) // effective set in CAPSET record
+var auditSyscallNameRe = regexp.MustCompile(`\bSYSCALL=(\w+)`) // decorated syscall name
+var auditSyscallNumRe = regexp.MustCompile(`\bsyscall=(\d+)`)  // raw syscall number
+var auditA1Re = regexp.MustCompile(`\ba1=([0-9a-f]+)`)         // syscall argument 1
+var auditA2Re = regexp.MustCompile(`\ba2=([0-9a-f]+)`)         // syscall argument 2
 // ── key → EventType ─────────────────────────────────────────────────────────
 
 var auditKeyToEventType = map[string]string{
@@ -37,6 +39,7 @@ var auditKeyToEventType = map[string]string{
 	"capset":          "CAPSET",
 	"exec_tmp":        "EXEC_TMP",
 	"tmp_write":       "TMP_WRITE",
+	"ufw_change":      "UFW_RULE_CHANGE", // writes to /etc/ufw/user.rules etc.
 }
 
 var tmpDirPrefixes = []string{"/tmp/", "/dev/shm/", "/run/shm/", "/var/tmp/"}
@@ -117,6 +120,13 @@ func ParseRawAuditLine(line, source string) *model.NormalizedEvent {
 			}
 		}
 
+		// SETUID: check the mode argument directly — the PATH record shows the
+		// pre-operation mode so checking it there is wrong.  We gate here at
+		// buffer time so non-setuid chmods never enter the pipeline at all.
+		if eventType == "SETUID" && !syscallSetsSetuid(line) {
+			return nil
+		}
+
 		// Everything else: buffer and wait for the completing record.
 		auditBufMu.Lock()
 		auditBuf[serial] = &partialAuditEvent{
@@ -185,13 +195,18 @@ func ParseRawAuditLine(line, source string) *model.NormalizedEvent {
 		}
 
 		name := auditField(auditNameRe, line)
-		if name == "" {
+		if name == "" || name == "(null)" || name == "?" {
+			// (null) means the kernel could not resolve the path — anonymous fd,
+			// memfd, or a file unlinked while still open. Not a real path.
+			auditBufMu.Lock()
+			delete(auditBuf, serial)
+			auditBufMu.Unlock()
 			return nil
 		}
 
 		switch partial.eventType {
 
-		case "FILE_READ", "FILE_WRITE", "CRON_WRITE", "SERVICE_WRITE", "TMP_WRITE":
+		case "FILE_READ", "FILE_WRITE", "CRON_WRITE", "SERVICE_WRITE", "TMP_WRITE", "UFW_RULE_CHANGE":
 			auditBufMu.Lock()
 			delete(auditBuf, serial)
 			auditBufMu.Unlock()
@@ -211,10 +226,12 @@ func ParseRawAuditLine(line, source string) *model.NormalizedEvent {
 			}
 
 		case "SETUID":
-			// Only fire if the PATH record shows the setuid bit is actually set.
-			if !auditHasSetuid(line) {
-				return nil
-			}
+			// The auditd rule filters on the mode argument bitmask (a1&04000=04000
+			// for chmod/fchmod, a2&04000=04000 for fchmodat), so any SETUID event
+			// that reaches here is guaranteed to be setting the bit.
+			// We do NOT check mode= in the PATH record because for chmod syscalls
+			// auditd records the file's mode BEFORE the operation — the setuid bit
+			// is only present in the syscall argument (a1/a2), not in the PATH record.
 			auditBufMu.Lock()
 			delete(auditBuf, serial)
 			auditBufMu.Unlock()
@@ -300,20 +317,6 @@ func auditSerial(line string) string {
 	return ""
 }
 
-// auditHasSetuid returns true when the mode= field on a PATH record
-// has the setuid bit (octal 04000) set.
-func auditHasSetuid(line string) bool {
-	modeStr := auditField(auditModeRe, line)
-	if modeStr == "" {
-		return false
-	}
-	val, err := strconv.ParseInt(strings.TrimLeft(modeStr, "0"), 8, 64)
-	if err != nil {
-		return false
-	}
-	return (val & 04000) != 0
-}
-
 // auditUser resolves the acting user from auid= (login uid) or uid=.
 // 4294967295 == (uint32)(-1) == unset.
 func auditUser(line string) string {
@@ -338,6 +341,55 @@ func auditTimestamp(line string) time.Time {
 		}
 	}
 	return time.Now()
+}
+
+// syscallSetsSetuid checks whether a SYSCALL audit record for a chmod-family
+// syscall is actually setting the setuid bit in the new mode argument.
+//
+// This replaces the kernel-level bitmask filter (-F a1&04000=04000) which is
+// only available in auditd 2.8+ and requires kernel support. By doing the
+// check in the parser we stay compatible with all auditd versions.
+//
+// Syscall / mode argument mapping (x86_64):
+//
+//	chmod    (90):  mode = a1
+//	fchmod   (91):  mode = a1
+//	fchmodat (268): mode = a2
+//
+// Auditd appends a decorated SYSCALL= field at the end of the line.
+// We prefer that over the raw syscall= number since it is arch-independent.
+func syscallSetsSetuid(line string) bool {
+	var modeHex string
+
+	// Prefer the human-readable SYSCALL= field added by auditd enrichment.
+	syscallName := strings.ToLower(auditField(auditSyscallNameRe, line))
+	switch syscallName {
+	case "chmod", "fchmod":
+		modeHex = auditField(auditA1Re, line)
+	case "fchmodat", "fchmodat2":
+		modeHex = auditField(auditA2Re, line)
+	default:
+		// Fall back to raw syscall number for systems that don't enrich.
+		num := auditField(auditSyscallNumRe, line)
+		switch num {
+		case "90", "91": // chmod, fchmod on x86_64
+			modeHex = auditField(auditA1Re, line)
+		case "268": // fchmodat on x86_64
+			modeHex = auditField(auditA2Re, line)
+		default:
+			// Unknown syscall — allow through so we don't silently drop events.
+			return true
+		}
+	}
+
+	if modeHex == "" {
+		return false
+	}
+	mode, err := strconv.ParseInt(modeHex, 16, 64)
+	if err != nil {
+		return false
+	}
+	return (mode & 04000) != 0
 }
 
 // pruneAuditBuffer drops partial events older than bufferTTL.

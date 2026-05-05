@@ -31,85 +31,159 @@ type NFLOGCollector struct {
 	Stats       *SourceStats
 }
 
-// ── iptables lifecycle ─────────────────────────────────────────────────────
+// ── iptables rule spec ─────────────────────────────────────────────────────
 
-func iptablesArgs(op string) [][]string {
-	nflogArgs := []string{
+// suspiciousOutboundPorts is the comma-separated list of ports monitored for
+// outbound C2 / exfiltration activity.  Must stay in sync with
+// suspiciousOutboundPorts in ufw_outbound_block.go.
+// iptables multiport supports a maximum of 15 ports; this list has exactly 15.
+const suspiciousOutboundPorts = "1080,1337,3333,3334,4444,4445,6667,6697,9001,9030,9050,9051,14444,31337,45700"
+
+// inboundNFLOGArgs returns rule args for the inbound logging chains.
+// No port filter — we want to see all inbound denied packets.
+func inboundNFLOGArgs() []string {
+	return []string{
 		"-j", "NFLOG",
 		"--nflog-group", fmt.Sprintf("%d", nflogGroup),
 		"--nflog-prefix", "IDS_BLOCK ",
 		"--nflog-threshold", "1",
 	}
-	return [][]string{
-		// position "1" puts our rule before UFW's rate-limited LOG target
-		append([]string{"iptables", op, "ufw-logging-deny", "1"}, nflogArgs...),
-		append([]string{"ip6tables", op, "ufw6-logging-deny", "1"}, nflogArgs...),
+}
+
+// outboundNFLOGArgs returns rule args for the OUTPUT chain.
+// Port-filtered so we only capture traffic to suspicious C2/exfil ports.
+// The rule fires BEFORE UFW drops the packet, giving us visibility into
+// connection attempts regardless of whether the firewall blocks them.
+func outboundNFLOGArgs(proto string) []string {
+	return []string{
+		"-p", proto,
+		"-m", "multiport", "--dports", suspiciousOutboundPorts,
+		"-j", "NFLOG",
+		"--nflog-group", fmt.Sprintf("%d", nflogGroup),
+		"--nflog-prefix", "IDS_BLOCK ",
+		"--nflog-threshold", "1",
 	}
 }
 
-func runIPTables(args []string) {
+// nflogInboundChains4/6 are the UFW logging chains on the INPUT/FORWARD path.
+var nflogInboundChains4 = []string{"ufw-logging-deny", "ufw-after-logging-input"}
+var nflogInboundChains6 = []string{"ufw6-logging-deny", "ufw6-after-logging-input"}
+
+// runIPTables executes an iptables command and logs the result.
+// Returns true on success.
+func runIPTables(args []string) bool {
 	out, err := exec.Command(args[0], args[1:]...).CombinedOutput()
 	if err != nil {
 		log.Printf("NFLOGCollector: iptables warning %v: %v — %s", args, err, out)
-	} else {
-		log.Printf("NFLOGCollector: iptables OK: %v", args)
+		return false
 	}
+	log.Printf("NFLOGCollector: iptables OK: %v", args)
+	return true
 }
 
+// ruleExists uses iptables -C to check whether a specific rule is present
+// in chain.  Returns true if present, false if not.
+// Takes explicit ruleArgs so the same function works for both inbound and
+// outbound rules which have different match criteria.
+func ruleExists(ipt, chain string, ruleArgs []string) bool {
+	args := append([]string{ipt, "-C", chain}, ruleArgs...)
+	return exec.Command(args[0], args[1:]...).Run() == nil
+}
+
+// insertRuleAtHead adds a rule at position 1 of chain if it isn't already there.
+func insertRuleAtHead(ipt, chain string, ruleArgs []string) {
+	if ruleExists(ipt, chain, ruleArgs) {
+		return
+	}
+	args := append([]string{ipt, "-I", chain, "1"}, ruleArgs...)
+	runIPTables(args)
+}
+
+// deleteRuleBySpec removes a rule by content match, not by position.
+// This prevents accidentally deleting a UFW rule that drifted to position 1.
+func deleteRuleBySpec(ipt, chain string, ruleArgs []string) {
+	if !ruleExists(ipt, chain, ruleArgs) {
+		return
+	}
+	args := append([]string{ipt, "-D", chain}, ruleArgs...)
+	runIPTables(args)
+}
+
+// setup inserts all NFLOG rules.
+//
+// Inbound: hooks into UFW's logging chains — catches all inbound/forward
+// denied packets before UFW's burst-limited LOG target.
+//
+// Outbound: hooks into the OUTPUT chain for specific suspicious ports.
+// UFW's outbound deny rules sit in ufw-user-output and DROP packets there —
+// ufw-logging-deny is never called for outbound so we must hook OUTPUT
+// directly.  The NFLOG rule fires first, then UFW drops the packet.
 func (c *NFLOGCollector) setup() {
-	log.Println("NFLOGCollector: inserting iptables NFLOG rules")
-
-	chains4 := []string{
-		"ufw-logging-deny",
-		"ufw-after-logging-input",
+	log.Println("NFLOGCollector: inserting inbound NFLOG rules")
+	inArgs := inboundNFLOGArgs()
+	for _, chain := range nflogInboundChains4 {
+		insertRuleAtHead("iptables", chain, inArgs)
+	}
+	for _, chain := range nflogInboundChains6 {
+		insertRuleAtHead("ip6tables", chain, inArgs)
 	}
 
-	for _, chain := range chains4 {
-		runIPTables([]string{
-			"iptables", "-I", chain, "1",
-			"-j", "NFLOG",
-			"--nflog-group", fmt.Sprintf("%d", nflogGroup),
-			"--nflog-prefix", "IDS_BLOCK ",
-			"--nflog-threshold", "1",
-		})
-	}
-	chains6 := []string{
-		"ufw6-logging-deny",
-		"ufw6-after-logging-input",
-	}
-	for _, chain := range chains6 {
-		runIPTables([]string{
-			"ip6tables", "-I", chain, "1",
-			"-j", "NFLOG",
-			"--nflog-group", fmt.Sprintf("%d", nflogGroup),
-			"--nflog-prefix", "IDS_BLOCK ",
-			"--nflog-threshold", "1",
-		})
+	log.Println("NFLOGCollector: inserting outbound NFLOG rules into OUTPUT chain")
+	for _, proto := range []string{"tcp", "udp"} {
+		insertRuleAtHead("iptables", "OUTPUT", outboundNFLOGArgs(proto))
 	}
 }
 
+// teardown removes all NFLOG rules using rule-spec deletion.
 func (c *NFLOGCollector) teardown() {
-	log.Println("NFLOGCollector: removing iptables NFLOG rules")
-
-	chains4 := []string{
-		"ufw-logging-deny",
-		"ufw-after-logging-input",
+	log.Println("NFLOGCollector: removing NFLOG rules")
+	inArgs := inboundNFLOGArgs()
+	for _, chain := range nflogInboundChains4 {
+		deleteRuleBySpec("iptables", chain, inArgs)
 	}
-
-	for _, chain := range chains4 {
-		runIPTables([]string{"iptables", "-D", chain, "1"})
+	for _, chain := range nflogInboundChains6 {
+		deleteRuleBySpec("ip6tables", chain, inArgs)
 	}
-
-	chains6 := []string{
-		"ufw6-logging-deny",
-		"ufw6-after-logging-input",
+	for _, proto := range []string{"tcp", "udp"} {
+		deleteRuleBySpec("iptables", "OUTPUT", outboundNFLOGArgs(proto))
 	}
-
-	for _, chain := range chains6 {
-		runIPTables([]string{"ip6tables", "-D", chain, "1"})
-	}
-
 	log.Println("NFLOGCollector: teardown complete")
+}
+
+// watchRules re-inserts any NFLOG rules that UFW wiped during a reload.
+// UFW flushes its own chains (ufw-*) on every rule change, removing our
+// inbound hooks.  The OUTPUT chain rules survive ufw reload but not
+// iptables -F OUTPUT, so we watch those too.
+func (c *NFLOGCollector) watchRules(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			inArgs := inboundNFLOGArgs()
+			for _, chain := range nflogInboundChains4 {
+				if !ruleExists("iptables", chain, inArgs) {
+					log.Printf("NFLOGCollector: inbound NFLOG rule missing from %s — re-inserting", chain)
+					insertRuleAtHead("iptables", chain, inArgs)
+				}
+			}
+			for _, chain := range nflogInboundChains6 {
+				if !ruleExists("ip6tables", chain, inArgs) {
+					log.Printf("NFLOGCollector: inbound NFLOG rule missing from %s — re-inserting", chain)
+					insertRuleAtHead("ip6tables", chain, inArgs)
+				}
+			}
+			for _, proto := range []string{"tcp", "udp"} {
+				outArgs := outboundNFLOGArgs(proto)
+				if !ruleExists("iptables", "OUTPUT", outArgs) {
+					log.Printf("NFLOGCollector: outbound NFLOG rule missing for proto %s — re-inserting", proto)
+					insertRuleAtHead("iptables", "OUTPUT", outArgs)
+				}
+			}
+		}
+	}
 }
 
 // ── Collector entry point ──────────────────────────────────────────────────
@@ -141,6 +215,11 @@ func (c *NFLOGCollector) Start(ctx context.Context, out chan<- *model.Normalized
 	c.setup()
 	// Always remove the rules when we exit — even on panic or fatal error.
 	defer c.teardown()
+
+	// Watch for UFW reloads that silently wipe our NFLOG rules.
+	// UFW rebuilds its chains on every rule change — this goroutine detects
+	// that and re-inserts our rules within 30 seconds of a reload.
+	go c.watchRules(ctx)
 
 	hook := func(attrs nflog.Attribute) int {
 		event := parseNFLOGPacket(attrs)

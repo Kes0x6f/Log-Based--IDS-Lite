@@ -12,71 +12,86 @@ var ipPortRegex = regexp.MustCompile(`(\S+) port (\d+)`)
 var repeatRegex = regexp.MustCompile(`message repeated (\d+) times`)
 var pamRepeatRegex = regexp.MustCompile(`(\d+) more authentication failure(s)?`)
 
+var authMethodRe = regexp.MustCompile(`(?:Accepted|Failed)\s+(\S+)\s+for`)
+
 func SSHParser(event *model.NormalizedEvent) *model.NormalizedEvent {
 	message := event.Message
-	//failed password
 	switch {
-	//repeated message
+	// repeated message
 	case strings.Contains(message, "message repeated"):
 		event.EventType = "SSH_FAILED"
 		event.Username = extractUsername(message)
 		event.SourceIP, event.Port = extractIPPort(message)
 		event.EventCount = extractRepeatCount(message)
+		event.Command = extractAuthMethod(message)
 
 	case strings.Contains(message, "Failed") && strings.Contains(message, "for"):
 		event.EventType = "SSH_FAILED"
-		// Handle "invalid user" variant
 		if strings.Contains(message, "invalid user") {
 			event.EventType = "SSH_INVALID_USER"
 		}
 		event.Username = extractUsername(message)
 		event.SourceIP, event.Port = extractIPPort(message)
+		event.Command = extractAuthMethod(message)
 
-	//accepted login
+	// accepted login
 	case strings.Contains(message, "Accepted password") || strings.Contains(message, "Accepted publickey"):
-
 		event.EventType = "SSH_SUCCESS"
 		event.Username = extractUsername(message)
 		event.SourceIP, event.Port = extractIPPort(message)
+		event.Command = extractAuthMethod(message)
 
-	//invalid user
+	// invalid user
 	case strings.HasPrefix(message, "Invalid user"):
-
 		event.EventType = "SSH_INVALID_USER"
 		event.Username = extractInvalidUser(message)
 		event.SourceIP, event.Port = extractIPPort(message)
 
-	//Max authenticaiton attempts
+	// max authentication attempts
 	case strings.Contains(message, "maximum authentication attempts exceeded"):
 		event.EventType = "SSH_MAX_AUTH_ATTEMPTS"
 		event.Username = extractUsername(message)
 		event.SourceIP, event.Port = extractIPPort(message)
+		event.Command = extractAuthMethod(message)
 
-	//disconnect
+	// disconnect
 	case strings.Contains(message, "Disconnected from"):
 		event.EventType = "SSH_DISCONNECT"
 		event.Username = extractUsername(message)
 		event.SourceIP, event.Port = extractIPPort(message)
 
-	//connection closed
+	// connection closed
 	case strings.Contains(message, "Connection closed"):
 		event.EventType = "SSH_DISCONNECT"
 		event.Username = extractUsername(message)
 		event.SourceIP, event.Port = extractIPPort(message)
 
-	//PAM authentication failure
+	// PAM authentication failure
 	case strings.Contains(message, "authentication failure"):
 		event.EventType = "SSH_FAILED"
 		event.SourceIP = extractIPFromRhost(message)
 		event.Username = extractUserFromPAM(message)
 		event.EventCount = extractPAMRepeat(message)
 
-	//for events not mentioned
+	// fallback
 	default:
 		event.Username = extractUsername(message)
 		event.SourceIP, event.Port = extractIPPort(message)
 	}
 	return event
+}
+
+// extractAuthMethod extracts the authentication method from sshd log lines.
+// Returns "password", "publickey", "keyboard-interactive", etc., or "" if
+// not present. Examples:
+//
+//	"Failed password for root from 1.2.3.4 port 22"       → "password"
+//	"Accepted publickey for alice from 1.2.3.4 port 22"   → "publickey"
+func extractAuthMethod(message string) string {
+	if m := authMethodRe.FindStringSubmatch(message); len(m) == 2 {
+		return m[1]
+	}
+	return ""
 }
 
 func extractIPPort(message string) (string, string) {

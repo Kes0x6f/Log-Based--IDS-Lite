@@ -158,6 +158,7 @@ func main() {
 		auditrule.NewAuditPtraceRule(),
 		auditrule.NewAuditCapsetRule(),
 		auditrule.NewAuditExecTmpRule(),
+		auditrule.NewUFWRuleChangeRule(),
 
 		// ── Web (Apache2 / Nginx) ─────────────────────────────────────────────
 		webrule.NewWebScannerUARule(),

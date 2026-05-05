@@ -2,11 +2,53 @@ package rule
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection/context"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 )
+
+// Suppress alerts on directory paths — auditd emits these when the
+// directory itself is opened, not when a unit file inside it is written.
+// A real unit file always has a recognised systemd extension.
+var systemdUnitExtensions = []string{
+	".service", ".socket", ".timer", ".target",
+	".mount", ".automount", ".path", ".slice", ".scope",
+}
+
+func isSystemdUnitFile(path string) bool {
+	for _, ext := range systemdUnitExtensions {
+		if strings.HasSuffix(path, ext) {
+			return true
+		}
+	}
+	return false
+}
+
+// serviceWriteDpkgSuffixes are staging-file endings that dpkg/apt create when
+// installing or upgrading systemd unit files.  These are not real persistence
+// installs — dpkg atomically renames them into place after the write.
+var serviceWriteDpkgSuffixes = []string{
+	".dpkg-tmp", ".dpkg-new", ".dpkg-old", ".dpkg-bak", ".dpkg-dist",
+}
+
+// serviceWriteTrustedExes are package-manager processes that legitimately write
+// unit files during controlled package installation.
+var serviceWriteTrustedExes = map[string]bool{
+	"/usr/bin/dpkg":    true,
+	"/usr/bin/apt":     true,
+	"/usr/bin/apt-get": true,
+}
+
+func isServiceWriteFalsePositive(filePath, exe string) bool {
+	for _, sfx := range serviceWriteDpkgSuffixes {
+		if strings.HasSuffix(filePath, sfx) {
+			return true
+		}
+	}
+	return serviceWriteTrustedExes[exe]
+}
 
 // AuditServiceWriteRule fires whenever a file is written to a systemd unit
 // directory. Installing a new service is a reliable, boot-persistent
@@ -38,6 +80,15 @@ func (r *AuditServiceWriteRule) Evaluate(event *model.NormalizedEvent, _ *contex
 	user := event.Username
 
 	if filePath == "" {
+		return nil
+	}
+
+	if !isSystemdUnitFile(filePath) {
+		return nil
+	}
+
+	exe := strings.TrimPrefix(event.Message, "exe=")
+	if isServiceWriteFalsePositive(filePath, exe) {
 		return nil
 	}
 

@@ -234,20 +234,20 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
 </div>
 
 <script>
-// ── All 40 rules from main.go ──────────────────────────────────────
+// ── All 41 rules from main.go ──────────────────────────────────────
 const RULES = [
   // SSH
   {name:"SSH Brute Force",           src:"auth", prog:"sshd",   cat:"authentication",  sev:"HIGH",     desc:"Multiple failed SSH login attempts from a single IP within a sliding window."},
   {name:"SSH Username Enumeration",  src:"auth", prog:"sshd",   cat:"authentication",  sev:"HIGH",     desc:"Single IP attempting many distinct usernames — automated user discovery."},
   {name:"SSH Suspicious Login",      src:"auth", prog:"sshd",   cat:"authentication",  sev:"CRITICAL", desc:"Successful SSH login preceded by 3+ failures in a 5-minute window — likely brute-force success."},
   {name:"Invalid User Brute Force",  src:"auth", prog:"sshd",   cat:"authentication",  sev:"MEDIUM",   desc:"Repeated SSH attempts for usernames that do not exist on the system."},
-  {name:"SSH Rapid Reconnect",       src:"auth", prog:"sshd",   cat:"authentication",  sev:"HIGH",     desc:"Frequent disconnect-reconnect cycles from the same IP — automated tool signature."},
+  {name:"SSH Rapid Reconnect Attack",       src:"auth", prog:"sshd",   cat:"authentication",  sev:"HIGH",     desc:"Frequent disconnect-reconnect cycles from the same IP — automated tool signature."},
   {name:"SSH Root Targeting",        src:"auth", prog:"sshd",   cat:"authentication",  sev:"HIGH",     desc:"Repeated failed SSH attempts specifically targeting the root account."},
   {name:"Distributed Brute Force",   src:"auth", prog:"sshd",   cat:"authentication",  sev:"HIGH",     desc:"Three or more distinct IPs all failing against the same username — coordinated attack."},
   // SUDO
   {name:"SUDO Brute Force",          src:"auth", prog:"sudo",   cat:"privilege",       sev:"HIGH",     desc:"Multiple failed sudo password attempts by the same user in a short window."},
   {name:"SUDO Success After Failure",src:"auth", prog:"sudo",   cat:"privilege",       sev:"HIGH",     desc:"sudo succeeds immediately following repeated failures — possible password guessing success."},
-  {name:"SUDO Sensitive Command",    src:"auth", prog:"sudo",   cat:"privilege",       sev:"varies",   desc:"Risk-scored detection: rm -rf, mkfs, dd, chmod 777, useradd, passwd — score adjusted by prior failures and frequency."},
+  {name:"SUDO Sensitive Command Execution",    src:"auth", prog:"sudo",   cat:"privilege",       sev:"varies",   desc:"Risk-scored detection: rm -rf, mkfs, dd, chmod 777, useradd, passwd — score adjusted by prior failures and frequency."},
   {name:"SUDO Command Abuse",        src:"auth", prog:"sudo",   cat:"privilege",       sev:"HIGH",     desc:"User executes 5+ sudo commands within 2 minutes — abnormal elevated-privilege usage rate."},
   {name:"SUDO Root Abuse",           src:"auth", prog:"sudo",   cat:"privilege",       sev:"HIGH",     desc:"User escalates to root via sudo 5+ times within 2 minutes."},
   {name:"SUDO Session Abuse",        src:"auth", prog:"sudo",   cat:"privilege",       sev:"MEDIUM",   desc:"User opens 4+ sudo sessions within 2 minutes — session thrashing pattern."},
@@ -263,7 +263,8 @@ const RULES = [
   {name:"UFW Repeated Block",        src:"ufw",  prog:"kernel", cat:"reconnaissance",  sev:"MEDIUM",   desc:"Same source IP accumulates 20+ firewall blocks in 2 minutes — persistent probing."},
   {name:"UFW Block Storm",           src:"ufw",  prog:"kernel", cat:"dos",             sev:"CRITICAL", desc:"200+ total firewall blocks within 1 minute across all IPs — DDoS or botnet sweep."},
   {name:"UFW Sensitive Port Probe",  src:"ufw",  prog:"kernel", cat:"reconnaissance",  sev:"varies",   desc:"Inbound probe on SSH, Telnet, RDP, databases, Docker, Kubernetes, or etcd. Severity varies by service."},
-  {name:"UFW Suspicious Outbound",   src:"ufw",  prog:"kernel", cat:"c2",              sev:"CRITICAL", desc:"Outbound connection blocked to known C2/backdoor ports: Metasploit, IRC, Tor, mining pools."},
+  {name:"UFW Suspicious Outbound Block",   src:"ufw",  prog:"kernel", cat:"c2",              sev:"CRITICAL", desc:"Outbound connection attempt to known C2/backdoor ports: Metasploit, IRC, Tor, mining pools. Captured via NFLOG in the OUTPUT chain before the firewall drops the packet — fires even if UFW has no deny-out rule."},
+  {name:"UFW Firewall Rule Changed", src:"audit",prog:"auditd", cat:"firewall",        sev:"varies",   desc:"Write to /etc/ufw/user.rules or /etc/ufw/user6.rules detected via auditd — CRITICAL for primary rule files, HIGH for other UFW config. Attackers weaken the firewall after gaining root to open reverse-shell ports. Requires auditd rule with key=ufw_change."},
   // Kernel
   {name:"Kernel Module Load",        src:"kern", prog:"kernel", cat:"rootkit",         sev:"CRITICAL", desc:"Out-of-tree or unsigned kernel module loaded — primary rootkit delivery mechanism."},
   {name:"Sensitive Binary Segfault", src:"kern", prog:"kernel", cat:"exploitation",    sev:"HIGH",     desc:"sshd, sudo, su, passwd, polkitd, or systemd crashes — may indicate exploitation attempt."},
@@ -272,17 +273,17 @@ const RULES = [
   // Audit
   {name:"Sensitive File Read",       src:"audit",prog:"auditd", cat:"credential-access",sev:"HIGH",    desc:"Process reads /etc/shadow, /etc/gshadow, /etc/sudoers, or ~/.ssh/authorized_keys."},
   {name:"Sensitive File Modified",   src:"audit",prog:"auditd", cat:"tampering",       sev:"CRITICAL", desc:"Write to /etc/passwd, /etc/shadow, /etc/sudoers, /root/.ssh, or /etc/hosts."},
-  {name:"Cron Job Created/Modified", src:"audit",prog:"auditd", cat:"persistence",     sev:"HIGH",     desc:"File written to any cron directory or /etc/crontab — classic persistence mechanism."},
-  {name:"Systemd Service Modified",  src:"audit",prog:"auditd", cat:"persistence",     sev:"CRITICAL", desc:"Systemd unit file written to system directories — boot-persistent execution backdoor."},
-  {name:"Setuid Bit Set on Binary",  src:"audit",prog:"auditd", cat:"privilege-escalation",sev:"CRITICAL",desc:"chmod sets setuid bit on a binary — creates a root-access backdoor executable."},
+  {name:"Cron Job Created or Modified", src:"audit",prog:"auditd", cat:"persistence",     sev:"HIGH",     desc:"File written to any cron directory or /etc/crontab — classic persistence mechanism."},
+  {name:"Systemd Service Created or Modified",  src:"audit",prog:"auditd", cat:"persistence",     sev:"CRITICAL", desc:"Systemd unit file written to system directories — boot-persistent execution backdoor. Suppresses dpkg/apt staging files (.dpkg-new, .dpkg-tmp) and directory-only opens."},
+  {name:"Setuid Bit Set on Binary",  src:"audit",prog:"auditd", cat:"privilege-escalation",sev:"CRITICAL",desc:"chmod sets setuid bit on a binary — creates a root-access backdoor executable. Parser checks the mode argument from the SYSCALL record directly; works on all auditd versions without bitmask filter syntax."},
   {name:"Ptrace Syscall Detected",   src:"audit",prog:"auditd", cat:"exploitation",    sev:"CRITICAL", desc:"Process calls ptrace — memory injection, credential dumping, or function hooking technique."},
-  {name:"Capability Change Detected",src:"audit",prog:"auditd", cat:"privilege-escalation",sev:"HIGH", desc:"Process dynamically modifies its Linux capability set — privilege escalation without a shell."},
-  {name:"Execution from Temp Dir",   src:"audit",prog:"auditd", cat:"execution",       sev:"varies",   desc:"Binary executed from /tmp, /dev/shm, or /var/tmp. CRITICAL if file was written then executed (dropper)."},
+  {name:"Capability Change Detected",src:"audit",prog:"auditd", cat:"privilege-escalation",sev:"HIGH", desc:"Process dynamically modifies its Linux capability set — privilege escalation without a shell. Whitelists known-safe system binaries (systemd, sshd, cron, sudo, etc.)."},
+  {name:"Execution from Temp Directory",   src:"audit",prog:"auditd", cat:"execution",       sev:"varies",   desc:"Binary executed from /tmp, /dev/shm, or /var/tmp. CRITICAL if file was written then executed (dropper)."},
   // Web
   {name:"Web Scanner Detected",      src:"web",  prog:"httpd",  cat:"reconnaissance",  sev:"HIGH",     desc:"Request user-agent matches Nikto, sqlmap, Masscan, Gobuster, Nuclei, Burp Suite, and 20+ others."},
   {name:"Web Path Probe",            src:"web",  prog:"httpd",  cat:"web-attack",      sev:"varies",   desc:"URI contains attack patterns: RCE/command injection (CRITICAL), SQL injection (CRITICAL), XSS (HIGH), directory traversal (HIGH)."},
   {name:"Web Path Enumeration",      src:"web",  prog:"httpd",  cat:"reconnaissance",  sev:"MEDIUM",   desc:"Single IP generates 15+ HTTP 404 responses in 1 minute — automated path discovery scan."},
-  {name:"Web Login Brute Force",     src:"web",  prog:"httpd",  cat:"credential-access",sev:"HIGH",    desc:"10+ HTTP 401/403 responses to the same IP in 2 minutes — credential stuffing or login brute force."},
+  {name:"Web Login Brute Force",     src:"web",  prog:"httpd",  cat:"credential-access",sev:"HIGH",    desc:"5+ HTTP 401/403 responses to the same IP in 3 minutes — credential stuffing or login brute force."},
   {name:"Unusual HTTP Method",       src:"web",  prog:"httpd",  cat:"web-probe",       sev:"varies",   desc:"TRACE (XST attack), CONNECT (proxy tunnel), OPTIONS (recon), PUT/DELETE/PATCH (file manipulation)."},
   {name:"High Request Rate",         src:"web",  prog:"httpd",  cat:"dos",             sev:"varies",   desc:"100+ requests/min from one IP (MEDIUM flood) or 500+ (HIGH — likely DDoS or heavy automated scan)."},
 ];

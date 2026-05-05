@@ -17,6 +17,7 @@ import (
 var capsetWhitelist = map[string]bool{
 	"/lib/systemd/systemd":                           true,
 	"/usr/lib/systemd/systemd":                       true,
+	"/usr/lib/systemd/systemd-executor":              true, // service launcher — sets caps for each spawned service
 	"/usr/bin/dbus-daemon":                           true,
 	"/usr/sbin/sshd":                                 true,
 	"/usr/bin/ssh":                                   true,
@@ -27,6 +28,8 @@ var capsetWhitelist = map[string]bool{
 	"/usr/sbin/cron":                                 true,
 	"/usr/lib/postfix/master":                        true,
 	"/usr/bin/bash":                                  true,
+	"/usr/bin/sudo":                                  true, // setuid-root binary — full cap set on every invocation
+	"/usr/sbin/sudo":                                 true,
 	"/snap/firefox/8191/usr/lib/firefox/firefox":     true,
 	"/snap/snapd/26865/usr/lib/snapd/snap-confine":   true,
 	"/snap/snapd/26865/usr/lib/snapd/snap-update-ns": true,
@@ -34,9 +37,6 @@ var capsetWhitelist = map[string]bool{
 	"/usr/libexec/gdm-session-worker":                true,
 	"/usr/sbin/avahi-daemon":                         true,
 	"/usr/sbin/auditctl":                             true,
-
-	// capsh uses bash
-	// Add others you discover from: sudo ausearch -k capset | grep exe=
 }
 
 // dangerousCaps are capability bits whose presence warrants CRITICAL severity.

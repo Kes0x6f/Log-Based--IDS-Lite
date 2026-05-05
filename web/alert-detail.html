@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>IDS — Alert Detail</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -99,6 +100,20 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
 .empty{color:var(--text-3);font-family:var(--font-mono);font-size:11px;text-align:center;padding:24px}
 /* nav breadcrumb */
 .nav-prev-next{display:flex;align-items:center;gap:8px}
+/* log-source badge */
+.src-badge{display:inline-block;font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:3px;font-weight:500;letter-spacing:.05em;background:var(--surface-3);color:var(--text-2)}
+.src-auth  {background:rgba(96,165,250,.12);color:#60a5fa}
+.src-ufw   {background:rgba(52,211,153,.12);color:#34d399}
+.src-kern  {background:rgba(251,191,36,.12);color:#fbbf24}
+.src-audit {background:rgba(251,146,60,.12);color:#fb923c}
+.src-web   {background:rgba(56,189,248,.12);color:#38bdf8}
+/* raw line evidence panel */
+.raw-panel{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:hidden}
+.raw-panel-head{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border)}
+.raw-panel-title{font-size:10px;font-weight:500;color:var(--text-3);letter-spacing:.1em;text-transform:uppercase}
+.raw-line{font-family:var(--font-mono);font-size:11px;color:var(--text-2);line-height:1.7;padding:12px 16px;word-break:break-all;white-space:pre-wrap;background:var(--surface-2)}
+/* command field — may be long, allow wrap */
+.field-val.wrap{white-space:pre-wrap;word-break:break-all;line-height:1.6}
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:2px}
@@ -174,9 +189,10 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
     <div class="alert-hero" id="hero" style="display:none">
       <div class="hero-top">
         <div>
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
             <span class="pill" id="h-sev"></span>
             <span class="tag" id="h-cat"></span>
+            <span class="src-badge" id="h-logsrc" style="display:none"></span>
           </div>
           <div class="hero-rule" id="h-rule">—</div>
         </div>
@@ -193,7 +209,25 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
         <div class="field"><div class="field-lbl">Username</div><div class="field-val mono" id="h-user">—</div></div>
         <div class="field"><div class="field-lbl">Host</div><div class="field-val mono" id="h-host">—</div></div>
         <div class="field"><div class="field-lbl">Event Count</div><div class="field-val mono" id="h-count">—</div></div>
+        <!-- New fields — hidden until populated -->
+        <div class="field" id="field-port" style="display:none">
+          <div class="field-lbl" id="h-port-lbl">Port</div>
+          <div class="field-val mono" id="h-port">—</div>
+        </div>
+        <div class="field" id="field-command" style="display:none">
+          <div class="field-lbl" id="h-cmd-lbl">Command</div>
+          <div class="field-val mono wrap" id="h-command">—</div>
+        </div>
       </div>
+    </div>
+
+    <!-- Raw log evidence -->
+    <div class="raw-panel" id="panel-raw" style="display:none">
+      <div class="raw-panel-head">
+        <span class="raw-panel-title">Raw Log Evidence</span>
+        <button class="t-btn" onclick="copyRaw()">copy</button>
+      </div>
+      <div class="raw-line" id="h-rawline"></div>
     </div>
 
     <!-- Related alerts from same IP -->
@@ -297,6 +331,46 @@ async function load(){
   el('h-user').textContent=alert.Username||'—';
   el('h-host').textContent=alert.Host||'—';
   el('h-count').textContent=(alert.EventCount||1).toLocaleString();
+
+  // ── LogSource badge ────────────────────────────────────────────────────
+  const logsrcEl = el('h-logsrc');
+  if(alert.LogSource && alert.LogSource !== ''){
+    logsrcEl.textContent = alert.LogSource;
+    logsrcEl.className = 'src-badge src-' + alert.LogSource;
+    logsrcEl.style.display = '';
+  }
+
+  // ── Port (label changes by log source) ────────────────────────────────
+  if(alert.Port && alert.Port !== ''){
+    const portLabels = {
+      auth: 'SSH Source Port', ufw: 'Dest Port',
+      kern: 'Dest Port',      web: 'HTTP Status',
+    };
+    el('h-port-lbl').textContent = portLabels[alert.LogSource] || 'Port';
+    el('h-port').textContent = alert.Port;
+    el('field-port').style.display = '';
+  }
+
+  // ── Command (label changes by log source) ─────────────────────────────
+  if(alert.Command && alert.Command !== ''){
+    const cmdLabels = {
+      auth:  'Auth Detail',
+      ufw:   'Protocol',
+      kern:  'Process / Module',
+      audit: 'File / Binary',
+      web:   'HTTP Request',
+    };
+    el('h-cmd-lbl').textContent = cmdLabels[alert.LogSource] || 'Command';
+    el('h-command').textContent = alert.Command;
+    el('field-command').style.display = '';
+  }
+
+  // ── Raw log evidence ───────────────────────────────────────────────────
+  if(alert.RawLine && alert.RawLine !== ''){
+    el('h-rawline').textContent = alert.RawLine;
+    el('panel-raw').style.display = '';
+  }
+
   const ipLink=el('h-ip-link');
   if(alert.SourceIP&&alert.SourceIP!=='-'&&alert.SourceIP!==''){
     ipLink.href=`/ip-profile.html?ip=${encodeURIComponent(alert.SourceIP)}`;
@@ -346,6 +420,13 @@ async function load(){
 function copyID(){
   const id=el('h-id')?.textContent;
   if(id)navigator.clipboard?.writeText(id);
+  const btn=event.target;const orig=btn.textContent;
+  btn.textContent='copied!';setTimeout(()=>btn.textContent=orig,1200);
+}
+
+function copyRaw(){
+  const raw=el('h-rawline')?.textContent;
+  if(raw)navigator.clipboard?.writeText(raw);
   const btn=event.target;const orig=btn.textContent;
   btn.textContent='copied!';setTimeout(()=>btn.textContent=orig,1200);
 }

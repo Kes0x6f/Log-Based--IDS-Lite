@@ -13,11 +13,14 @@ type AlertRepository struct {
 
 func (r *AlertRepository) Insert(alert *model.Alert) error {
 	query := `
-    INSERT INTO alerts (
-        id, timestamp, rule_name, severity, category,
-        message, source_ip, username, host, event_count
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `
+	INSERT INTO alerts (
+		id, timestamp, rule_name, severity, category,
+		message,
+		source_ip, username, host,
+		port, command, log_source, raw_line,
+		event_count
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
 
 	_, err := r.DB.Exec(query,
 		alert.ID,
@@ -29,6 +32,10 @@ func (r *AlertRepository) Insert(alert *model.Alert) error {
 		alert.SourceIP,
 		alert.Username,
 		alert.Host,
+		alert.Port,
+		alert.Command,
+		alert.LogSource,
+		alert.RawLine,
 		alert.EventCount,
 	)
 
@@ -40,7 +47,10 @@ func (r *AlertRepository) Insert(alert *model.Alert) error {
 func (r *AlertRepository) GetByID(id string) (*model.Alert, error) {
 	query := `
 	SELECT id, timestamp, rule_name, severity, category,
-	       message, source_ip, username, host, event_count
+	       message,
+	       source_ip, username, host,
+	       port, command, log_source, raw_line,
+	       event_count
 	FROM alerts
 	WHERE id = ?
 	`
@@ -48,7 +58,10 @@ func (r *AlertRepository) GetByID(id string) (*model.Alert, error) {
 	var a model.Alert
 	err := r.DB.QueryRow(query, id).Scan(
 		&a.ID, &a.Timestamp, &a.RuleName, &a.Severity, &a.Category,
-		&a.Message, &a.SourceIP, &a.Username, &a.Host, &a.EventCount,
+		&a.Message,
+		&a.SourceIP, &a.Username, &a.Host,
+		&a.Port, &a.Command, &a.LogSource, &a.RawLine,
+		&a.EventCount,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -59,7 +72,10 @@ func (r *AlertRepository) GetByID(id string) (*model.Alert, error) {
 func (r *AlertRepository) GetRecent(limit int) ([]model.Alert, error) {
 	query := `
 	SELECT id, timestamp, rule_name, severity, category,
-	       message, source_ip, username, host, event_count
+	       message,
+	       source_ip, username, host,
+	       port, command, log_source, raw_line,
+	       event_count
 	FROM alerts
 	ORDER BY timestamp DESC
 	LIMIT ?
@@ -78,7 +94,10 @@ func (r *AlertRepository) GetRecent(limit int) ([]model.Alert, error) {
 func (r *AlertRepository) GetAlerts(ip, severity, category, rule, since string, limit int) ([]model.Alert, error) {
 	query := `
 	SELECT id, timestamp, rule_name, severity, category,
-	       message, source_ip, username, host, event_count
+	       message,
+	       source_ip, username, host,
+	       port, command, log_source, raw_line,
+	       event_count
 	FROM alerts
 	WHERE 1=1
 	`
@@ -201,7 +220,10 @@ func scanAlerts(rows *sql.Rows) ([]model.Alert, error) {
 		var a model.Alert
 		err := rows.Scan(
 			&a.ID, &a.Timestamp, &a.RuleName, &a.Severity, &a.Category,
-			&a.Message, &a.SourceIP, &a.Username, &a.Host, &a.EventCount,
+			&a.Message,
+			&a.SourceIP, &a.Username, &a.Host,
+			&a.Port, &a.Command, &a.LogSource, &a.RawLine,
+			&a.EventCount,
 		)
 		if err != nil {
 			return nil, err

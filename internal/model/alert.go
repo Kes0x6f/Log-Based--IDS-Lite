@@ -25,9 +25,14 @@ type Alert struct {
 
 	Message string
 
-	SourceIP string
-	Username string
-	Host     string
+	// Context fields — populated directly from NormalizedEvent
+	SourceIP  string
+	Username  string
+	Host      string
+	Port      string // SSH source port / HTTP status code / UFW dest port
+	Command   string // sudo command / HTTP method+URI / audit file path / binary
+	LogSource string // auth | ufw | kern | audit | web
+	RawLine   string // exact original log line that triggered the alert
 
 	EventCount int
 
@@ -54,6 +59,10 @@ func NewAlert(
 		SourceIP:   event.SourceIP,
 		Username:   event.Username,
 		Host:       event.Host,
+		Port:       event.Port,
+		Command:    event.Command,
+		LogSource:  event.LogSource,
+		RawLine:    event.RawLine,
 		EventCount: count,
 	}
 }
