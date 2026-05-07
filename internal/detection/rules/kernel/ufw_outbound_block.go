@@ -2,6 +2,7 @@ package rule
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
@@ -121,6 +122,8 @@ func (r *UFWOutboundBlockRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 	if proto == "" {
 		proto = "unknown"
 	}
+
+	event.ThreatDetail = fmt.Sprintf("service:%s port:%s", strings.ReplaceAll(desc, " ", "-"), port)
 
 	alert := model.NewAlert(
 		"UFW Suspicious Outbound Block",

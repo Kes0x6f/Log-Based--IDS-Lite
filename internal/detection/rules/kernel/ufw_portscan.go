@@ -2,6 +2,8 @@ package rule
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
@@ -104,11 +106,29 @@ func (r *UFWPortScanRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 		return nil
 	}
 
+	ports := make([]string, 0, len(s.portsByIP[ip]))
+	for p := range s.portsByIP[ip] {
+		ports = append(ports, p)
+	}
+	// Sort numerically by converting to int — or lexically is fine for display
+	sort.Strings(ports)
+
+	const maxPortShow = 10
+	shown := ports
+	suffix := ""
+	if len(ports) > maxPortShow {
+		shown = ports[:maxPortShow]
+		suffix = fmt.Sprintf(",…+%d", len(ports)-maxPortShow)
+	}
+
+	event.PortList = strings.Join(shown, ",") + suffix
+	event.FailCount = distinctPorts
+
 	alert := model.NewAlert(
 		"UFW Port Scan Detected",
 		model.SeverityHigh,
 		"reconnaissance",
-		fmt.Sprintf("IP %s probed %d distinct ports within %v", ip, distinctPorts, r.Window),
+		fmt.Sprintf("IP %s probed %d distinct ports in %v [%s%s]", ip, distinctPorts, r.Window, strings.Join(shown, ","), suffix),
 		event,
 		distinctPorts,
 	)

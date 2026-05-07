@@ -2,6 +2,7 @@ package rule
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection/context"
@@ -37,8 +38,13 @@ func (r *KernModuleLoadRule) Evaluate(event *model.NormalizedEvent, _ *context.D
 		moduleName = "unknown"
 	}
 
+	moduleType := "unknown"
+	if strings.Contains(event.ThreatDetail, "type:") {
+		moduleType = strings.TrimPrefix(event.ThreatDetail, "type:")
+	}
+
 	msg := fmt.Sprintf(
-		"Unsigned/out-of-tree kernel module loaded: %s — possible rootkit", moduleName,
+		"Kernel module loaded (%s): %s — possible rootkit", moduleType, moduleName,
 	)
 
 	return []*model.Alert{

@@ -96,6 +96,8 @@ func (r *UFWRepeatedBlockRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 		return nil
 	}
 
+	event.FailCount = count
+
 	alert := model.NewAlert(
 		"UFW Repeated Block",
 		model.SeverityMedium,

@@ -127,6 +127,8 @@ func (r *UFWSensitivePortRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 		proto = "unknown"
 	}
 
+	event.ThreatDetail = fmt.Sprintf("service:%s", meta.Service)
+
 	alert := model.NewAlert(
 		"UFW Sensitive Port Probe",
 		meta.Severity,

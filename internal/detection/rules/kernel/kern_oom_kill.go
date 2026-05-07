@@ -96,10 +96,16 @@ func (r *KernOOMKillRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 	isCritical := criticalProcesses[proc]
 
 	// Only alert if threshold met, or process is critical (threshold = 1)
+	detail := event.ThreatDetail
 	threshold := r.Threshold
 	if isCritical {
 		threshold = 1
+		detail += " critical:yes"
+	} else {
+		detail += " critical:no"
 	}
+	event.ThreatDetail = detail
+
 	if count < threshold {
 		return nil
 	}

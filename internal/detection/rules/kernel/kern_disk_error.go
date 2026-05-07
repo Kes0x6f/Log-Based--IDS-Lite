@@ -2,6 +2,7 @@ package rule
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
@@ -108,6 +109,12 @@ func (r *KernDiskErrorRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 	severity := model.SeverityMedium
 	if count >= r.HighThreshold {
 		severity = model.SeverityHigh
+	}
+
+	event.FailCount = count
+
+	if dev != "unknown" && !strings.Contains(event.ThreatDetail, "dev:") {
+		event.ThreatDetail += fmt.Sprintf(" dev:%s", dev)
 	}
 
 	alert := model.NewAlert(

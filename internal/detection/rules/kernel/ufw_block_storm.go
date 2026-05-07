@@ -39,12 +39,15 @@ func (r *UFWBlockStormRule) Meta() detection.RuleMeta {
 
 type ufwBlockStormState struct {
 	allBlocks   []time.Time // global ring buffer of block timestamps
+	ipCounts    map[string]time.Time
 	lastAlertAt time.Time
 	lastAlertID string
 }
 
 func newUFWBlockStormState() *ufwBlockStormState {
-	return &ufwBlockStormState{}
+	return &ufwBlockStormState{
+		ipCounts: make(map[string]time.Time),
+	}
 }
 
 func getUFWBlockStormState(ctx *context.DetectionContext) *ufwBlockStormState {
@@ -65,7 +68,18 @@ func (r *UFWBlockStormRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 	for i := 0; i < event.EventCount; i++ {
 		s.allBlocks = append(s.allBlocks, now)
 	}
+
+	if ip := event.SourceIP; ip != "" {
+		s.ipCounts[ip] = now
+	}
+
 	s.allBlocks = helper.PruneOld(s.allBlocks, now, r.Window)
+
+	for ip, t := range s.ipCounts {
+		if now.Sub(t) > r.Window {
+			delete(s.ipCounts, ip)
+		}
+	}
 
 	total := len(s.allBlocks)
 	if total < r.Threshold {
@@ -85,11 +99,17 @@ func (r *UFWBlockStormRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 		return nil
 	}
 
+	ipCount := len(s.ipCounts)
+
+	event.FailCount = total
+	event.IPCount = ipCount
+	event.ThreatDetail = fmt.Sprintf("sources:%d", ipCount)
+
 	alert := model.NewAlert(
 		"UFW Block Storm",
 		model.SeverityCritical,
 		"dos",
-		fmt.Sprintf("%d firewall blocks within %v — possible DDoS or botnet sweep", total, r.Window),
+		fmt.Sprintf("%d firewall blocks in %v from %d distinct IPs — possible DDoS or botnet sweep", total, r.Window, ipCount),
 		event,
 		total,
 	)
