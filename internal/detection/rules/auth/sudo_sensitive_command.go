@@ -113,15 +113,20 @@ func (r *SudoSensitiveCommandRule) Evaluate(event *model.NormalizedEvent, ctx *c
 
 	severity := mapSeverity(score)
 
+	reason := "base-score"
+	if len(ctx.SudoShared.RecentFails[user]) >= 3 {
+		reason = "prior-failures"
+	} else if len(ctx.SudoShared.CommandsByUser[user]) >= 5 {
+		reason = "high-frequency"
+	}
+
+	event.ThreatDetail = fmt.Sprintf("score:%d reason:%s", score, reason)
+
 	alert := model.NewAlert(
 		"SUDO Sensitive Command Execution",
 		severity,
 		"privilege",
-		fmt.Sprintf(
-			"User %s executed sensitive command: %s",
-			user,
-			cmd,
-		),
+		fmt.Sprintf("User %s executed sensitive command: %s (risk score: %d)", user, cmd, score),
 		event,
 		1,
 	)

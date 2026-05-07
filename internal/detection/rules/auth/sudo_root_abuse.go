@@ -108,17 +108,13 @@ func (r *SudoRootAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 							}
 							return nil
 						}
+						event.FailCount = count
 
 						alert := model.NewAlert(
 							"SUDO Root Abuse",
 							model.SeverityHigh,
 							"privilege",
-							fmt.Sprintf(
-								"User %s escalated to root %d times within %v",
-								u,
-								count,
-								r.Window,
-							),
+							fmt.Sprintf("User %s escalated to root %d times in %v", u, count, r.Window),
 							event,
 							count,
 						)

@@ -41,6 +41,12 @@ func (r *PasswdChangedRule) Evaluate(event *model.NormalizedEvent, _ *context.De
 		severity = model.SeverityCritical
 	}
 
+	privilegedFlag := "no"
+	if privilegedAccounts[event.Username] {
+		privilegedFlag = "yes"
+	}
+	event.ThreatDetail = fmt.Sprintf("account:%s privileged:%s", event.Username, privilegedFlag)
+
 	return []*model.Alert{
 		model.NewAlert(
 			"Password Changed",

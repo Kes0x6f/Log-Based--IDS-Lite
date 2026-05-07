@@ -105,16 +105,13 @@ func (r *SudoSessionAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 							return nil
 						}
 
+						event.FailCount = count
+
 						alert := model.NewAlert(
 							"SUDO Session Abuse",
 							model.SeverityMedium,
 							"privilege",
-							fmt.Sprintf(
-								"User %s opened %d sudo sessions within %v",
-								u,
-								count,
-								r.Window,
-							),
+							fmt.Sprintf("User %s opened %d sudo sessions in %v", u, count, r.Window),
 							event,
 							count,
 						)

@@ -105,11 +105,12 @@ func (r *SudoBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context
 	}
 
 	totalCount := len(s.failedByUser[user])
+	event.FailCount = totalCount
 	newAlert := model.NewAlert(
 		"SUDO Brute Force",
 		model.SeverityHigh,
 		"privilege",
-		fmt.Sprintf("Multiple failed sudo attempts by user %s", user),
+		fmt.Sprintf("SUDO brute force by user %s: %d password failures in %v", user, totalCount, r.Window),
 		event,
 		totalCount,
 	)

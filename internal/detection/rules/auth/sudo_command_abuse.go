@@ -2,6 +2,7 @@ package rule
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
@@ -37,6 +38,7 @@ type sudoCommandAbuseState struct {
 	// cooldown fix fields
 	lastAlertID  map[string]string
 	runningCount map[string]int
+	recentCmds   map[string][]string
 }
 
 func newSudoCommandAbuseState() *sudoCommandAbuseState {
@@ -44,6 +46,7 @@ func newSudoCommandAbuseState() *sudoCommandAbuseState {
 		lastAbuseAlert: make(map[string]time.Time),
 		lastAlertID:    make(map[string]string),
 		runningCount:   make(map[string]int),
+		recentCmds:     make(map[string][]string),
 	}
 }
 
@@ -77,6 +80,13 @@ func (r *SudoCommandAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 	ctx.SudoShared.CommandsByUser[user] = helper.PruneOld(ctx.SudoShared.CommandsByUser[user], now, r.Window)
 	count := len(ctx.SudoShared.CommandsByUser[user])
 
+	if event.Command != "" {
+		s.recentCmds[user] = append(s.recentCmds[user], event.Command)
+		if len(s.recentCmds[user]) > 5 {
+			s.recentCmds[user] = s.recentCmds[user][len(s.recentCmds[user])-5:]
+		}
+	}
+
 	if count < r.Threshold {
 		return nil
 	}
@@ -96,16 +106,23 @@ func (r *SudoCommandAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 		return nil
 	}
 
+	// Build command sample for ThreatDetail
+	cmds := s.recentCmds[user]
+	cmdSample := strings.Join(cmds, ",")
+
+	// Truncate individual commands to keep ThreatDetail readable
+	if len(cmdSample) > 120 {
+		cmdSample = cmdSample[:117] + "..."
+	}
+
+	event.FailCount = count
+	event.ThreatDetail = "cmds:" + cmdSample
+
 	newAlert := model.NewAlert(
 		"SUDO Command Abuse",
 		model.SeverityHigh,
 		"privilege",
-		fmt.Sprintf(
-			"User %s executed %d sudo commands within %v",
-			user,
-			count,
-			r.Window,
-		),
+		fmt.Sprintf("User %s executed %d sudo commands in %v", user, count, r.Window),
 		event,
 		count,
 	)

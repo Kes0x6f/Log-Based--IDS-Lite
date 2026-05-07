@@ -18,8 +18,10 @@ func (r *AlertRepository) Insert(alert *model.Alert) error {
 		message,
 		source_ip, username, host,
 		port, command, log_source, raw_line,
-		event_count
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		event_count,
+		fail_count, ip_count, attack_duration,
+		target_user, auth_method, port_list, caller_exe, threat_detail
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := r.DB.Exec(query,
@@ -37,6 +39,15 @@ func (r *AlertRepository) Insert(alert *model.Alert) error {
 		alert.LogSource,
 		alert.RawLine,
 		alert.EventCount,
+
+		alert.FailCount,
+		alert.IPCount,
+		alert.AttackDuration,
+		alert.TargetUser,
+		alert.AuthMethod,
+		alert.PortList,
+		alert.CallerExe,
+		alert.ThreatDetail,
 	)
 
 	return err
@@ -51,6 +62,8 @@ func (r *AlertRepository) GetByID(id string) (*model.Alert, error) {
 	       source_ip, username, host,
 	       port, command, log_source, raw_line,
 	       event_count
+		   fail_count, ip_count, attack_duration,
+	       target_user, auth_method, port_list, caller_exe, threat_detail
 	FROM alerts
 	WHERE id = ?
 	`
@@ -62,6 +75,8 @@ func (r *AlertRepository) GetByID(id string) (*model.Alert, error) {
 		&a.SourceIP, &a.Username, &a.Host,
 		&a.Port, &a.Command, &a.LogSource, &a.RawLine,
 		&a.EventCount,
+		&a.FailCount, &a.IPCount, &a.AttackDuration,
+		&a.TargetUser, &a.AuthMethod, &a.PortList, &a.CallerExe, &a.ThreatDetail,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -76,6 +91,8 @@ func (r *AlertRepository) GetRecent(limit int) ([]model.Alert, error) {
 	       source_ip, username, host,
 	       port, command, log_source, raw_line,
 	       event_count
+		   fail_count, ip_count, attack_duration,
+	       target_user, auth_method, port_list, caller_exe, threat_detail
 	FROM alerts
 	ORDER BY timestamp DESC
 	LIMIT ?
@@ -98,6 +115,8 @@ func (r *AlertRepository) GetAlerts(ip, severity, category, rule, since string, 
 	       source_ip, username, host,
 	       port, command, log_source, raw_line,
 	       event_count
+		   fail_count, ip_count, attack_duration,
+	       target_user, auth_method, port_list, caller_exe, threat_detail
 	FROM alerts
 	WHERE 1=1
 	`
@@ -224,6 +243,8 @@ func scanAlerts(rows *sql.Rows) ([]model.Alert, error) {
 			&a.SourceIP, &a.Username, &a.Host,
 			&a.Port, &a.Command, &a.LogSource, &a.RawLine,
 			&a.EventCount,
+			&a.FailCount, &a.IPCount, &a.AttackDuration,
+			&a.TargetUser, &a.AuthMethod, &a.PortList, &a.CallerExe, &a.ThreatDetail,
 		)
 		if err != nil {
 			return nil, err

@@ -27,6 +27,7 @@ var auditSyscallNameRe = regexp.MustCompile(`\bSYSCALL=(\w+)`) // decorated sysc
 var auditSyscallNumRe = regexp.MustCompile(`\bsyscall=(\d+)`)  // raw syscall number
 var auditA1Re = regexp.MustCompile(`\ba1=([0-9a-f]+)`)         // syscall argument 1
 var auditA2Re = regexp.MustCompile(`\ba2=([0-9a-f]+)`)         // syscall argument 2
+
 // ── key → EventType ─────────────────────────────────────────────────────────
 
 var auditKeyToEventType = map[string]string{
@@ -39,7 +40,7 @@ var auditKeyToEventType = map[string]string{
 	"capset":          "CAPSET",
 	"exec_tmp":        "EXEC_TMP",
 	"tmp_write":       "TMP_WRITE",
-	"ufw_change":      "UFW_RULE_CHANGE", // writes to /etc/ufw/user.rules etc.
+	"ufw_change":      "UFW_RULE_CHANGE",
 }
 
 var tmpDirPrefixes = []string{"/tmp/", "/dev/shm/", "/run/shm/", "/var/tmp/"}
@@ -107,14 +108,16 @@ func ParseRawAuditLine(line, source string) *model.NormalizedEvent {
 			if exe == "" {
 				exe = "unknown"
 			}
+			// CallerExe holds the binary that called ptrace.
+			// Command is intentionally empty — there is no "command" for ptrace.
+			// Message is empty — rules (Phase 6) write a human-readable message.
 			return &model.NormalizedEvent{
 				Timestamp:  ts,
 				LogSource:  source,
 				Program:    "auditd",
 				EventType:  "PTRACE",
 				Username:   auditUser(line),
-				Command:    exe,
-				Message:    "exe=" + exe,
+				CallerExe:  exe,
 				RawLine:    line,
 				EventCount: 1,
 			}
@@ -143,6 +146,11 @@ func ParseRawAuditLine(line, source string) *model.NormalizedEvent {
 	//
 	// cap_prm and cap_eff are NOT on the SYSCALL record — only on this one.
 	// Look up the buffered SYSCALL to get exe= and username=, then emit.
+	//
+	// NOTE: Message intentionally retains "cap_prm=X cap_eff=Y" here because
+	// the audit_capset.go rule (Phase 6) reads it to decode capability names.
+	// Once Phase 6 is complete, audit_capset.go will write the decoded names
+	// to ThreatDetail and Message will be cleared here.
 	case "CAPSET":
 		if serial == "" {
 			return nil
@@ -167,13 +175,16 @@ func ParseRawAuditLine(line, source string) *model.NormalizedEvent {
 		capPrm := auditField(auditCapPrmRe, line)
 		capEff := auditField(auditCapEffRe, line)
 
-		// Message format matches parseCapFields() in audit_capset.go rule.
 		return &model.NormalizedEvent{
-			Timestamp:  partial.timestamp,
-			LogSource:  source,
-			Program:    "auditd",
-			EventType:  "CAPSET",
-			Username:   partial.username,
+			Timestamp: partial.timestamp,
+			LogSource: source,
+			Program:   "auditd",
+			EventType: "CAPSET",
+			Username:  partial.username,
+			// CallerExe is the binary that called capset.
+			// Command kept equal to CallerExe for backward compat with
+			// audit_capset.go until that rule is updated in Phase 6.
+			CallerExe:  exe,
 			Command:    exe,
 			Message:    "cap_prm=" + capPrm + " cap_eff=" + capEff,
 			RawLine:    line,
@@ -211,8 +222,9 @@ func ParseRawAuditLine(line, source string) *model.NormalizedEvent {
 			delete(auditBuf, serial)
 			auditBufMu.Unlock()
 
-			// Pass exe via Message so rules can filter by calling binary.
-			// Format: "exe=<path>"  — parsed with strings.TrimPrefix in rule.
+			// CallerExe holds the binary that opened the file.
+			// Command holds the file path.
+			// Message is empty — rules write a human-readable description.
 			return &model.NormalizedEvent{
 				Timestamp:  partial.timestamp,
 				LogSource:  source,
@@ -220,22 +232,18 @@ func ParseRawAuditLine(line, source string) *model.NormalizedEvent {
 				EventType:  partial.eventType,
 				Username:   partial.username,
 				Command:    name,
-				Message:    "exe=" + partial.exe,
+				CallerExe:  partial.exe,
 				RawLine:    line,
 				EventCount: 1,
 			}
 
 		case "SETUID":
-			// The auditd rule filters on the mode argument bitmask (a1&04000=04000
-			// for chmod/fchmod, a2&04000=04000 for fchmodat), so any SETUID event
-			// that reaches here is guaranteed to be setting the bit.
-			// We do NOT check mode= in the PATH record because for chmod syscalls
-			// auditd records the file's mode BEFORE the operation — the setuid bit
-			// is only present in the syscall argument (a1/a2), not in the PATH record.
 			auditBufMu.Lock()
 			delete(auditBuf, serial)
 			auditBufMu.Unlock()
 
+			// Command: binary path that had setuid set on it.
+			// CallerExe: binary that called chmod (the actor).
 			return &model.NormalizedEvent{
 				Timestamp:  partial.timestamp,
 				LogSource:  source,
@@ -243,7 +251,7 @@ func ParseRawAuditLine(line, source string) *model.NormalizedEvent {
 				EventType:  "SETUID",
 				Username:   partial.username,
 				Command:    name,
-				Message:    "exe=" + partial.exe,
+				CallerExe:  partial.exe,
 				RawLine:    line,
 				EventCount: 1,
 			}
@@ -260,6 +268,8 @@ func ParseRawAuditLine(line, source string) *model.NormalizedEvent {
 					delete(auditBuf, serial)
 					auditBufMu.Unlock()
 
+					// Command: executed temp-dir path.
+					// CallerExe: interpreter that ran it (e.g. /bin/bash).
 					return &model.NormalizedEvent{
 						Timestamp:  partial.timestamp,
 						LogSource:  source,
@@ -267,7 +277,7 @@ func ParseRawAuditLine(line, source string) *model.NormalizedEvent {
 						EventType:  "EXEC_TMP",
 						Username:   partial.username,
 						Command:    name,
-						Message:    "exe=" + partial.exe,
+						CallerExe:  partial.exe,
 						RawLine:    line,
 						EventCount: 1,
 					}
@@ -308,7 +318,6 @@ func auditField(re *regexp.Regexp, line string) string {
 }
 
 // auditSerial extracts the serial from msg=audit(SEC.MSEC:SERIAL).
-// This is the correlation key linking SYSCALL → CWD → PATH → CAPSET records.
 func auditSerial(line string) string {
 	m := auditMsgRe.FindStringSubmatch(line)
 	if len(m) == 3 {
@@ -345,23 +354,9 @@ func auditTimestamp(line string) time.Time {
 
 // syscallSetsSetuid checks whether a SYSCALL audit record for a chmod-family
 // syscall is actually setting the setuid bit in the new mode argument.
-//
-// This replaces the kernel-level bitmask filter (-F a1&04000=04000) which is
-// only available in auditd 2.8+ and requires kernel support. By doing the
-// check in the parser we stay compatible with all auditd versions.
-//
-// Syscall / mode argument mapping (x86_64):
-//
-//	chmod    (90):  mode = a1
-//	fchmod   (91):  mode = a1
-//	fchmodat (268): mode = a2
-//
-// Auditd appends a decorated SYSCALL= field at the end of the line.
-// We prefer that over the raw syscall= number since it is arch-independent.
 func syscallSetsSetuid(line string) bool {
 	var modeHex string
 
-	// Prefer the human-readable SYSCALL= field added by auditd enrichment.
 	syscallName := strings.ToLower(auditField(auditSyscallNameRe, line))
 	switch syscallName {
 	case "chmod", "fchmod":
@@ -369,15 +364,13 @@ func syscallSetsSetuid(line string) bool {
 	case "fchmodat", "fchmodat2":
 		modeHex = auditField(auditA2Re, line)
 	default:
-		// Fall back to raw syscall number for systems that don't enrich.
 		num := auditField(auditSyscallNumRe, line)
 		switch num {
-		case "90", "91": // chmod, fchmod on x86_64
+		case "90", "91":
 			modeHex = auditField(auditA1Re, line)
-		case "268": // fchmodat on x86_64
+		case "268":
 			modeHex = auditField(auditA2Re, line)
 		default:
-			// Unknown syscall — allow through so we don't silently drop events.
 			return true
 		}
 	}

@@ -36,6 +36,15 @@ type Alert struct {
 
 	EventCount int
 
+	FailCount      int
+	IPCount        int
+	AttackDuration int64
+	TargetUser     string
+	AuthMethod     string
+	PortList       string
+	CallerExe      string
+	ThreatDetail   string
+
 	IsUpdate        bool
 	OriginalAlertID string
 }
@@ -50,20 +59,28 @@ func NewAlert(
 ) *Alert {
 
 	return &Alert{
-		ID:         GenerateID(),
-		Timestamp:  event.Timestamp,
-		RuleName:   ruleName,
-		Severity:   severity,
-		Category:   category,
-		Message:    message,
-		SourceIP:   event.SourceIP,
-		Username:   event.Username,
-		Host:       event.Host,
-		Port:       event.Port,
-		Command:    event.Command,
-		LogSource:  event.LogSource,
-		RawLine:    event.RawLine,
-		EventCount: count,
+		ID:             GenerateID(),
+		Timestamp:      event.Timestamp,
+		RuleName:       ruleName,
+		Severity:       severity,
+		Category:       category,
+		Message:        message,
+		SourceIP:       event.SourceIP,
+		Username:       event.Username,
+		Host:           event.Host,
+		Port:           event.Port,
+		Command:        event.Command,
+		LogSource:      event.LogSource,
+		RawLine:        event.RawLine,
+		EventCount:     count,
+		FailCount:      event.FailCount,
+		IPCount:        event.IPCount,
+		AttackDuration: event.AttackDuration,
+		TargetUser:     event.TargetUser,
+		AuthMethod:     event.AuthMethod,
+		PortList:       event.PortList,
+		CallerExe:      event.CallerExe,
+		ThreatDetail:   event.ThreatDetail,
 	}
 }
 

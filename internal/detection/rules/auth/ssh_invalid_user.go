@@ -100,11 +100,12 @@ func (r *SSHInvalidUserRule) Evaluate(event *model.NormalizedEvent, ctx *context
 	}
 
 	totalCount := len(s.invalidUserAttempts[ip])
+	event.TargetUser = event.Username
 	newAlert := model.NewAlert(
 		"Invalid User Brute Force",
 		model.SeverityMedium,
 		"authentication",
-		fmt.Sprintf("Multiple invalid user attempts from %s", ip),
+		fmt.Sprintf("SSH invalid-user brute force from %s: %d attempts in %v, user: %s", ip, totalCount, r.Window, event.Username),
 		event,
 		totalCount,
 	)

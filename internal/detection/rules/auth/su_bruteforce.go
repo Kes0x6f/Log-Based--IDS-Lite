@@ -90,11 +90,17 @@ func (r *SuBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context.D
 	}
 
 	totalCount := len(s.failedByUser[user])
+	targetAcct := event.Command
+	if targetAcct == "" {
+		targetAcct = "unknown"
+	}
+	event.FailCount = totalCount
+	event.TargetUser = targetAcct
 	newAlert := model.NewAlert(
 		"SU Brute Force",
 		model.SeverityHigh,
 		"privilege",
-		fmt.Sprintf("Multiple failed su attempts by user %s", user),
+		fmt.Sprintf("SU brute force by user %s targeting %s: %d failures in %v", user, targetAcct, totalCount, r.Window),
 		event,
 		totalCount,
 	)

@@ -18,13 +18,23 @@ func CreateTables(db *sql.DB) error {
 			username   TEXT,
 			host       TEXT,
 
-			-- Extended context fields (added in v0.2)
+			-- Extended context fields 
 			port       TEXT,
 			command    TEXT,
 			log_source TEXT,
 			raw_line   TEXT,
 
 			event_count INTEGER
+
+			
+			fail_count      INTEGER DEFAULT 0,
+			ip_count        INTEGER DEFAULT 0,
+			attack_duration INTEGER DEFAULT 0,
+			target_user     TEXT    DEFAULT '',
+			auth_method     TEXT    DEFAULT '',
+			port_list       TEXT    DEFAULT '',
+			caller_exe      TEXT    DEFAULT '',
+			threat_detail   TEXT    DEFAULT ''
 		);`,
 
 		`CREATE INDEX IF NOT EXISTS idx_alert_ip         ON alerts(source_ip);`,
@@ -54,6 +64,15 @@ func CreateTables(db *sql.DB) error {
 		`ALTER TABLE alerts ADD COLUMN command    TEXT DEFAULT ''`,
 		`ALTER TABLE alerts ADD COLUMN log_source TEXT DEFAULT ''`,
 		`ALTER TABLE alerts ADD COLUMN raw_line   TEXT DEFAULT ''`,
+
+		`ALTER TABLE alerts ADD COLUMN fail_count      INTEGER DEFAULT 0`,
+		`ALTER TABLE alerts ADD COLUMN ip_count        INTEGER DEFAULT 0`,
+		`ALTER TABLE alerts ADD COLUMN attack_duration INTEGER DEFAULT 0`,
+		`ALTER TABLE alerts ADD COLUMN target_user     TEXT    DEFAULT ''`,
+		`ALTER TABLE alerts ADD COLUMN auth_method     TEXT    DEFAULT ''`,
+		`ALTER TABLE alerts ADD COLUMN port_list       TEXT    DEFAULT ''`,
+		`ALTER TABLE alerts ADD COLUMN caller_exe      TEXT    DEFAULT ''`,
+		`ALTER TABLE alerts ADD COLUMN threat_detail   TEXT    DEFAULT ''`,
 	}
 
 	for _, m := range migrations {
@@ -66,10 +85,17 @@ func CreateTables(db *sql.DB) error {
 		}
 	}
 
-	// Create the log_source index here — after the migration guarantees the
-	// column exists on both new and existing databases.
-	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_alert_log_source ON alerts(log_source)`); err != nil {
-		return err
+	// Create indexes after migrations guarantee columns exist on both new
+	// and upgraded databases.
+	indexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_alert_log_source ON alerts(log_source)`,
+		`CREATE INDEX IF NOT EXISTS idx_alert_target_user ON alerts(target_user)`,
+	}
+
+	for _, idx := range indexes {
+		if _, err := db.Exec(idx); err != nil {
+			return err
+		}
 	}
 
 	return nil

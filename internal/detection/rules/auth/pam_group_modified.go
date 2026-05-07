@@ -55,6 +55,12 @@ func (r *GroupModifiedRule) Evaluate(event *model.NormalizedEvent, _ *context.De
 		msg = fmt.Sprintf("User %s added to privileged group %s", event.Username, group)
 	}
 
+	privilegedFlag := "no"
+	if privilegedGroups[strings.ToLower(group)] {
+		privilegedFlag = "yes"
+	}
+	event.ThreatDetail = fmt.Sprintf("group:%s privileged:%s", group, privilegedFlag)
+
 	return []*model.Alert{
 		model.NewAlert(
 			"Group Membership Changed",
