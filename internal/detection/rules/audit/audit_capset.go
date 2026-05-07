@@ -109,6 +109,8 @@ func (r *AuditCapsetRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 	// ── Filter 2: capability drop to zero is safe ─────────────────────────
 	// event.Message was set by the parser: "cap_prm=<hex> cap_eff=<hex>"
 	capPrm, capEff := parseCapFields(event.Message)
+	combined := capPrm | capEff
+	capNames := decodeCapBits(combined)
 
 	isCapDrop := capPrm == 0 && capEff == 0
 	if isCapDrop {
@@ -122,7 +124,7 @@ func (r *AuditCapsetRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 	// so genuine unknown binaries don't go silently unnoticed.
 
 	// ── Determine severity based on which caps are being set ──────────────
-	severity, capName := classifyCapabilities(capPrm | capEff)
+	severity, _ := classifyCapabilities(combined)
 
 	s := getAuditCapsetState(ctx)
 	key := user + ":" + exe
@@ -144,16 +146,17 @@ func (r *AuditCapsetRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 
 	s.countByKey[key] = 1
 
-	msg := fmt.Sprintf(
-		"Process %s (user: %s) gained capabilities at runtime (cap_prm=0x%x cap_eff=0x%x)",
-		exe, user, capPrm, capEff,
-	)
-	if capName != "" {
-		msg = fmt.Sprintf(
-			"Process %s (user: %s) gained dangerous capability %s — possible privilege escalation",
-			exe, user, capName,
-		)
+	if len(capNames) > 0 {
+		event.ThreatDetail = "caps:" + strings.Join(capNames, ",")
+	} else {
+		event.ThreatDetail = fmt.Sprintf("cap_prm:0x%x cap_eff:0x%x", capPrm, capEff)
 	}
+
+	capDisplay := event.ThreatDetail
+	msg := fmt.Sprintf(
+		"%s gained capabilities at runtime (user: %s) — %s",
+		exe, user, capDisplay,
+	)
 
 	alert := model.NewAlert(
 		"Capability Change Detected",
@@ -206,4 +209,17 @@ func classifyCapabilities(combined uint64) (model.Severity, string) {
 		return model.SeverityHigh, ""
 	}
 	return model.SeverityMedium, ""
+}
+
+func decodeCapBits(combined uint64) []string {
+	var names []string
+	for bit, name := range dangerousCaps {
+		if combined&(1<<uint(bit)) != 0 {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 && combined != 0 {
+		names = []string{fmt.Sprintf("bits:0x%x", combined)}
+	}
+	return names
 }

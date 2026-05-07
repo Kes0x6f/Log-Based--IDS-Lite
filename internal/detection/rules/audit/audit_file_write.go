@@ -90,11 +90,16 @@ func (r *AuditFileWriteRule) Evaluate(event *model.NormalizedEvent, ctx *context
 		return nil
 	}
 
+	exeLabel := event.CallerExe
+	if exeLabel == "" {
+		exeLabel = "unknown"
+	}
+
 	alert := model.NewAlert(
 		"Sensitive File Modified",
 		model.SeverityCritical,
 		"tampering",
-		fmt.Sprintf("Critical system file modified: %s (user: %s)", filePath, user),
+		fmt.Sprintf("%s modified critical file %s (user: %s)", exeLabel, filePath, user),
 		event,
 		1,
 	)

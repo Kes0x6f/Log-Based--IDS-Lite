@@ -101,14 +101,14 @@ func (r *AuditPtraceRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 
 	s.countByKey[key] = 1
 
+	event.ThreatDetail = fmt.Sprintf("caller:%s", exe)
+
 	alert := model.NewAlert(
 		"Ptrace Syscall Detected",
 		model.SeverityCritical,
 		"exploitation",
-		fmt.Sprintf(
-			"Process %s (user: %s) called ptrace — possible memory injection or credential dumping",
-			exe, user,
-		),
+		fmt.Sprintf("%s called ptrace (user: %s) — possible memory injection or credential dumping",
+			exe, user),
 		event,
 		count,
 	)

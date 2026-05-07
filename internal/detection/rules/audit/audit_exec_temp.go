@@ -145,17 +145,14 @@ func (r *AuditExecTmpRule) Evaluate(event *model.NormalizedEvent, ctx *context.D
 
 		if wasDropped {
 			lag := now.Sub(writeTime).Round(time.Second)
+			event.ThreatDetail = fmt.Sprintf("pattern:dropper lag:%s", lag)
 			severity = model.SeverityCritical
 			msg = fmt.Sprintf(
-				"Dropper detected: %s written to temp dir then executed %v later (user: %s)",
-				path, lag, event.Username,
-			)
+				"Dropper: %s written to temp then executed %v later (user: %s)", path, lag, event.Username)
 		} else {
+			event.ThreatDetail = "pattern:exec-only"
 			severity = model.SeverityHigh
-			msg = fmt.Sprintf(
-				"Execution from temp directory: %s (user: %s) — possible in-memory stager",
-				path, event.Username,
-			)
+			msg = fmt.Sprintf("Execution from temp dir: %s (user: %s)", path, event.Username)
 		}
 
 		alert := model.NewAlert(

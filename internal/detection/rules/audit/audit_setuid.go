@@ -104,14 +104,18 @@ func (r *AuditSetuidRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 		return nil
 	}
 
+	event.ThreatDetail = "bit:setuid"
+
+	exeLabel := event.CallerExe
+	if exeLabel == "" {
+		exeLabel = "unknown"
+	}
+
 	alert := model.NewAlert(
 		"Setuid Bit Set on Binary",
 		model.SeverityCritical,
 		"privilege-escalation",
-		fmt.Sprintf(
-			"Setuid bit set on binary: %s (by user: %s) — possible backdoor installation",
-			binPath, user,
-		),
+		fmt.Sprintf("Setuid bit set on %s by %s (user: %s)", binPath, exeLabel, user),
 		event,
 		1,
 	)

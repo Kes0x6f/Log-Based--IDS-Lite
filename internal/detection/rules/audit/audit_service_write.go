@@ -87,9 +87,13 @@ func (r *AuditServiceWriteRule) Evaluate(event *model.NormalizedEvent, _ *contex
 		return nil
 	}
 
-	exe := strings.TrimPrefix(event.Message, "exe=")
-	if isServiceWriteFalsePositive(filePath, exe) {
+	if isServiceWriteFalsePositive(filePath, event.CallerExe) {
 		return nil
+	}
+
+	exeLabel := event.CallerExe
+	if exeLabel == "" {
+		exeLabel = "unknown"
 	}
 
 	return []*model.Alert{
@@ -97,7 +101,7 @@ func (r *AuditServiceWriteRule) Evaluate(event *model.NormalizedEvent, _ *contex
 			"Systemd Service Created or Modified",
 			model.SeverityCritical,
 			"persistence",
-			fmt.Sprintf("Systemd unit file written: %s (user: %s) — possible persistence mechanism", filePath, user),
+			fmt.Sprintf("%s wrote systemd unit %s (user: %s)", exeLabel, filePath, user),
 			event,
 			1,
 		),

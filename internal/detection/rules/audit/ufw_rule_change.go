@@ -2,6 +2,7 @@ package rule
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -110,16 +111,25 @@ func (r *UFWRuleChangeRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 
 	s.countByKey[key] = 1
 
-	msg := fmt.Sprintf(
-		"UFW firewall rule file modified: %s (user: %s) — verify this change was intentional",
-		filePath, user,
-	)
+	reason := "ufw-config"
+	if strings.Contains(filePath, "user.rules") || strings.Contains(filePath, "user6.rules") {
+		reason = "primary-ruleset"
+	}
+
+	event.ThreatDetail = fmt.Sprintf("file:%s reason:%s",
+		filepath.Base(filePath), reason)
+
+	// Use CallerExe in the message
+	exeLabel := event.CallerExe
+	if exeLabel == "" {
+		exeLabel = "unknown"
+	}
 
 	alert := model.NewAlert(
 		"UFW Firewall Rule Changed",
 		severity,
 		"firewall",
-		msg,
+		fmt.Sprintf("%s modified UFW config %s (user: %s)", exeLabel, filePath, user),
 		event,
 		count,
 	)

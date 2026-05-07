@@ -131,7 +131,7 @@ func (r *AuditFileReadRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 	}
 
 	// Extract the calling binary from Message ("exe=<path>") set by the parser.
-	exe := strings.TrimPrefix(event.Message, "exe=")
+	exe := event.CallerExe
 
 	// ── Whitelist check: suppress known-legitimate (exe, file) combinations ──
 	if isTrustedRead(exe, filePath) {
@@ -162,7 +162,7 @@ func (r *AuditFileReadRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 		"Sensitive File Read",
 		model.SeverityHigh,
 		"credential-access",
-		fmt.Sprintf("Sensitive file read by unexpected process: %s → %s (user: %s)", exeLabel, filePath, user),
+		fmt.Sprintf("%s read sensitive file %s (user: %s)", exeLabel, filePath, user),
 		event,
 		1,
 	)

@@ -45,12 +45,17 @@ func (r *AuditCronWriteRule) Evaluate(event *model.NormalizedEvent, _ *context.D
 		return nil
 	}
 
+	exeLabel := event.CallerExe
+	if exeLabel == "" {
+		exeLabel = "unknown"
+	}
+
 	return []*model.Alert{
 		model.NewAlert(
 			"Cron Job Created or Modified",
 			model.SeverityHigh,
 			"persistence",
-			fmt.Sprintf("Cron file written: %s (user: %s) — possible persistence mechanism", filePath, user),
+			fmt.Sprintf("%s wrote cron file %s (user: %s)", exeLabel, filePath, user),
 			event,
 			1,
 		),
