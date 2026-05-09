@@ -85,17 +85,17 @@ func (r *SSHDistributedBruteForceRule) Evaluate(event *model.NormalizedEvent, ct
 
 	// prune old IPs (outside time window)
 	for k, t := range s.ipsByUser[user] {
-		if now.Sub(t) > r.Window {
+		if now.Sub(t) > cfg.Window {
 			delete(s.ipsByUser[user], k)
 		}
 	}
 
-	if len(s.ipsByUser[user]) < r.Threshold {
+	if len(s.ipsByUser[user]) < cfg.Threshold {
 		return nil
 	}
 
 	last := s.lastDistributedAlert[user]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		s.runningCount[user] += event.EventCount

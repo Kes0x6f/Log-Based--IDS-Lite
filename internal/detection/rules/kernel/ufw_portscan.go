@@ -135,7 +135,7 @@ func (r *UFWPortScanRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 		"UFW Port Scan Detected",
 		model.SeverityHigh,
 		"reconnaissance",
-		fmt.Sprintf("IP %s probed %d distinct ports in %v [%s%s]", ip, distinctPorts, r.Window, strings.Join(shown, ","), suffix),
+		fmt.Sprintf("IP %s probed %d distinct ports in %v [%s%s]", ip, distinctPorts, cfg.Window, strings.Join(shown, ","), suffix),
 		event,
 		distinctPorts,
 	)
