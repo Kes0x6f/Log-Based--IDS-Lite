@@ -32,6 +32,32 @@ func NewRouter(handler *Handler) http.Handler {
 	// Live collector statistics for sources.html
 	mux.HandleFunc("/sources/status", handler.GetSourceStatus)
 
+	// ── Rule config endpoints ─────────────────────────────────────────────────────
+
+	// GET /rules — full rule list with defaults, overrides, effective config, stats.
+	mux.HandleFunc("/rules", handler.GetRuleList)
+
+	mux.HandleFunc("/rule-configs", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handler.GetRuleConfigMap(w, r)
+		case http.MethodPost:
+			handler.UpsertRuleConfig(w, r)
+		case http.MethodDelete:
+			if r.URL.Query().Get("rule") != "" {
+				handler.ResetRuleConfig(w, r)
+			} else {
+				handler.ResetAllRuleConfigs(w, r)
+			}
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/rule-configs/simulate", handler.SimulateRuleConfig)
+
+	mux.HandleFunc("/rule-configs/history", handler.GetRuleConfigHistory)
+
 	// ── Settings ──────────────────────────────────────────────────────────────
 	// Persistent settings for the settings page
 	mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {

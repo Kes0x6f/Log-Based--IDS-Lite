@@ -26,9 +26,16 @@ func NewSuSuccessAfterFailRule() *SuSuccessAfterFailRule {
 
 func (r *SuSuccessAfterFailRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "auth",
-		Program:    "su",
-		EventTypes: []string{"SU_FAIL", "SU_SUCCESS"},
+		LogSource:   "auth",
+		Program:     "su",
+		EventTypes:  []string{"SU_FAIL", "SU_SUCCESS"},
+		DisplayName: "SU Success After Failure",
+		Description: "su succeeds after 3+ failures within 5 minutes — brute-force success against local account.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   3,
+			WindowSec:   300,
+			CooldownSec: 300,
+		},
 	}
 }
 
@@ -55,7 +62,7 @@ func getSuSuccessAfterFailState(ctx *context.DetectionContext) *suSuccessAfterFa
 	return s
 }
 
-func (r *SuSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *SuSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getSuSuccessAfterFailState(ctx)
 	user := event.Username
 	now := event.Timestamp
@@ -68,16 +75,16 @@ func (r *SuSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *con
 
 	case "SU_FAIL":
 		s.recentFailures[user] = append(s.recentFailures[user], now)
-		s.recentFailures[user] = helper.PruneOld(s.recentFailures[user], now, r.Window)
+		s.recentFailures[user] = helper.PruneOld(s.recentFailures[user], now, cfg.Window)
 		return nil
 
 	case "SU_SUCCESS":
 		failures := s.recentFailures[user]
 
-		if len(failures) >= r.Threshold {
+		if len(failures) >= cfg.Threshold {
 			last := s.lastAlertByUser[user]
 
-			if now.Sub(last) > r.Window {
+			if now.Sub(last) > cfg.Cooldown {
 				alert := model.NewAlert(
 					"SU Success After Failure",
 					model.SeverityCritical,

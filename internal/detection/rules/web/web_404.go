@@ -33,9 +33,16 @@ func NewWeb404Rule() *Web404Rule {
 
 func (r *Web404Rule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "web",
-		Program:    "httpd",
-		EventTypes: []string{"HTTP_404"},
+		LogSource:   "web",
+		Program:     "httpd",
+		EventTypes:  []string{"HTTP_404"},
+		DisplayName: "Web Path Enumeration",
+		Description: "Single IP generates 15+ HTTP 404 responses in 1 minute — automated path discovery scan.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   15,
+			WindowSec:   60,
+			CooldownSec: 300,
+		},
 	}
 }
 
@@ -66,7 +73,7 @@ func getWeb404State(ctx *context.DetectionContext) *web404State {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *Web404Rule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *Web404Rule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getWeb404State(ctx)
 	ip := event.SourceIP
 	now := event.Timestamp
@@ -76,15 +83,15 @@ func (r *Web404Rule) Evaluate(event *model.NormalizedEvent, ctx *context.Detecti
 	}
 
 	s.hitsByIP[ip] = append(s.hitsByIP[ip], now)
-	s.hitsByIP[ip] = helper.PruneOld(s.hitsByIP[ip], now, r.Window)
+	s.hitsByIP[ip] = helper.PruneOld(s.hitsByIP[ip], now, cfg.Window)
 	count := len(s.hitsByIP[ip])
 
-	if count < r.Threshold {
+	if count < cfg.Threshold {
 		return nil
 	}
 
 	last := s.lastAlertIP[ip]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		if id := s.lastAlertID[ip]; id != "" {
@@ -103,7 +110,7 @@ func (r *Web404Rule) Evaluate(event *model.NormalizedEvent, ctx *context.Detecti
 		"Web Path Enumeration",
 		model.SeverityMedium,
 		"reconnaissance",
-		fmt.Sprintf("IP %s: %d 404 responses in %v — path enumeration", ip, count, r.Window),
+		fmt.Sprintf("IP %s: %d 404 responses in %v — path enumeration", ip, count, cfg.Window),
 		event,
 		count,
 	)

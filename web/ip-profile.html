@@ -348,7 +348,9 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
                 <th style="width:80px">Severity</th>
                 <th>Rule</th>
                 <th style="width:80px">Category</th>
-                <th style="width:80px">User</th>
+                <th style="width:80px">User / Target</th>
+                <th style="width:52px;text-align:right">Fails</th>
+                <th style="width:72px">Duration</th>
                 <th>Message</th>
                 <th style="width:50px;text-align:right">Count</th>
               </tr></thead>
@@ -598,6 +600,15 @@ function renderCategories(alerts) {
     </div>`).join('');
 }
 
+function fmtDuration(secs){
+  if(!secs||secs<=0)return'—';
+  if(secs<60)return secs+'s';
+  const m=Math.floor(secs/60),s=secs%60;
+  if(m<60)return s>0?m+'m '+s+'s':m+'m';
+  const h=Math.floor(m/60),rm=m%60;
+  return rm>0?h+'h '+rm+'m':h+'h';
+}
+
 function renderTable() {
   const total  = alerts.length;
   const pages  = Math.max(1, Math.ceil(total/PAGE_SZ));
@@ -610,12 +621,18 @@ function renderTable() {
 
   const tbody = document.getElementById('alerts-tbody');
   tbody.innerHTML = slice.map(a =>
-    `<tr>
+    `<tr onclick="location.href='/alert-detail.html?id='+encodeURIComponent(a.ID)" style="cursor:pointer">
       <td class="mono">${fmtDt(a.Timestamp)}</td>
       <td>${pill(a.Severity)}</td>
       <td class="rule-col">${esc(a.RuleName||'—')}</td>
       <td class="mono">${esc(a.Category||'—')}</td>
-      <td class="mono">${esc(a.Username||'—')}</td>
+      <td class="mono">${
+        a.TargetUser&&a.TargetUser!==''&&a.TargetUser!==a.Username
+          ? esc(a.Username||'—')+' → '+esc(a.TargetUser)
+          : esc(a.Username||'—')
+      }</td>
+      <td class="mono" style="text-align:right;color:${a.FailCount>0?'var(--red)':'var(--text-3)'}">${a.FailCount>0?a.FailCount.toLocaleString():'—'}</td>
+      <td class="mono" style="color:var(--amber)">${fmtDuration(a.AttackDuration)}</td>
       <td class="msg-col" title="${esc(a.Message)}">${esc(a.Message||'—')}</td>
       <td class="cnt-col">${a.EventCount||1}</td>
     </tr>`).join('');

@@ -42,9 +42,16 @@ func NewKernDiskErrorRule() *KernDiskErrorRule {
 
 func (r *KernDiskErrorRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "kern",
-		Program:    "kernel",
-		EventTypes: []string{"DISK_ERROR"},
+		LogSource:   "kern",
+		Program:     "kernel",
+		EventTypes:  []string{"DISK_ERROR"},
+		DisplayName: "Disk I/O Errors Detected",
+		Description: "Block device accumulates repeated I/O errors — hardware failure or deliberate filesystem corruption.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   5,
+			WindowSec:   300,
+			CooldownSec: 900,
+		},
 	}
 }
 
@@ -75,7 +82,7 @@ func getKernDiskErrorState(ctx *context.DetectionContext) *kernDiskErrorState {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *KernDiskErrorRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *KernDiskErrorRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getKernDiskErrorState(ctx)
 	dev := event.Command // device name set by KernParser
 	now := event.Timestamp
@@ -85,15 +92,15 @@ func (r *KernDiskErrorRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 	}
 
 	s.errorsByDev[dev] = append(s.errorsByDev[dev], now)
-	s.errorsByDev[dev] = helper.PruneOld(s.errorsByDev[dev], now, r.Window)
+	s.errorsByDev[dev] = helper.PruneOld(s.errorsByDev[dev], now, cfg.Window)
 	count := len(s.errorsByDev[dev])
 
-	if count < r.LowThreshold {
+	if count < cfg.Threshold {
 		return nil
 	}
 
 	last := s.lastAlertByDev[dev]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		if id := s.lastAlertID[dev]; id != "" {
@@ -121,7 +128,7 @@ func (r *KernDiskErrorRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 		"Disk I/O Errors Detected",
 		severity,
 		"hardware",
-		fmt.Sprintf("Device %s: %d I/O errors within %v — possible hardware failure or tampering", dev, count, r.Window),
+		fmt.Sprintf("Device %s: %d I/O errors within %v — possible hardware failure or tampering", dev, count, cfg.Window),
 		event,
 		count,
 	)

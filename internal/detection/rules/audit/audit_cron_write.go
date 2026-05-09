@@ -31,13 +31,16 @@ func NewAuditCronWriteRule() *AuditCronWriteRule {
 
 func (r *AuditCronWriteRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "audit",
-		Program:    "auditd",
-		EventTypes: []string{"CRON_WRITE"},
+		LogSource:   "audit",
+		Program:     "auditd",
+		EventTypes:  []string{"CRON_WRITE"},
+		DisplayName: "Cron Job Created or Modified",
+		Description: "File written to any cron directory or /etc/crontab — classic persistence mechanism.",
+		Defaults:    detection.RuleDefaults{},
 	}
 }
 
-func (r *AuditCronWriteRule) Evaluate(event *model.NormalizedEvent, _ *context.DetectionContext) []*model.Alert {
+func (r *AuditCronWriteRule) Evaluate(event *model.NormalizedEvent, _ *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	filePath := event.Command
 	user := event.Username
 

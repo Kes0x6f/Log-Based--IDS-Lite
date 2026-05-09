@@ -29,9 +29,16 @@ func NewUFWBlockStormRule() *UFWBlockStormRule {
 
 func (r *UFWBlockStormRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "ufw",
-		Program:    "kernel",
-		EventTypes: []string{"FW_BLOCK"},
+		LogSource:   "ufw",
+		Program:     "kernel",
+		EventTypes:  []string{"FW_BLOCK"},
+		DisplayName: "UFW Block Storm",
+		Description: "200+ total firewall blocks within 1 minute across all IPs — DDoS or botnet sweep.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   200,
+			WindowSec:   60,
+			CooldownSec: 300,
+		},
 	}
 }
 
@@ -61,7 +68,7 @@ func getUFWBlockStormState(ctx *context.DetectionContext) *ufwBlockStormState {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *UFWBlockStormRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *UFWBlockStormRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getUFWBlockStormState(ctx)
 	now := event.Timestamp
 
@@ -73,20 +80,20 @@ func (r *UFWBlockStormRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 		s.ipCounts[ip] = now
 	}
 
-	s.allBlocks = helper.PruneOld(s.allBlocks, now, r.Window)
+	s.allBlocks = helper.PruneOld(s.allBlocks, now, cfg.Window)
 
 	for ip, t := range s.ipCounts {
-		if now.Sub(t) > r.Window {
+		if now.Sub(t) > cfg.Window {
 			delete(s.ipCounts, ip)
 		}
 	}
 
 	total := len(s.allBlocks)
-	if total < r.Threshold {
+	if total < cfg.Threshold {
 		return nil
 	}
 
-	inCooldown := !s.lastAlertAt.IsZero() && now.Sub(s.lastAlertAt) <= r.Cooldown
+	inCooldown := !s.lastAlertAt.IsZero() && now.Sub(s.lastAlertAt) <= cfg.Cooldown
 
 	if inCooldown {
 		if s.lastAlertID != "" {
@@ -109,7 +116,7 @@ func (r *UFWBlockStormRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 		"UFW Block Storm",
 		model.SeverityCritical,
 		"dos",
-		fmt.Sprintf("%d firewall blocks in %v from %d distinct IPs — possible DDoS or botnet sweep", total, r.Window, ipCount),
+		fmt.Sprintf("%d firewall blocks in %v from %d distinct IPs — possible DDoS or botnet sweep", total, cfg.Window, ipCount),
 		event,
 		total,
 	)

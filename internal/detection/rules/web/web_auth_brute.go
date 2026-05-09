@@ -34,9 +34,16 @@ func NewWebAuthBruteRule() *WebAuthBruteRule {
 
 func (r *WebAuthBruteRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "web",
-		Program:    "httpd",
-		EventTypes: []string{"HTTP_AUTH_FAIL"},
+		LogSource:   "web",
+		Program:     "httpd",
+		EventTypes:  []string{"HTTP_AUTH_FAIL"},
+		DisplayName: "Web Login Brute Force",
+		Description: "5+ HTTP 401/403 responses to the same IP in 3 minutes — credential stuffing or login brute force.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   5,
+			WindowSec:   180,
+			CooldownSec: 600,
+		},
 	}
 }
 
@@ -67,7 +74,7 @@ func getWebAuthBruteState(ctx *context.DetectionContext) *webAuthBruteState {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *WebAuthBruteRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *WebAuthBruteRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getWebAuthBruteState(ctx)
 	ip := event.SourceIP
 	now := event.Timestamp
@@ -77,15 +84,15 @@ func (r *WebAuthBruteRule) Evaluate(event *model.NormalizedEvent, ctx *context.D
 	}
 
 	s.failsByIP[ip] = append(s.failsByIP[ip], now)
-	s.failsByIP[ip] = helper.PruneOld(s.failsByIP[ip], now, r.Window)
+	s.failsByIP[ip] = helper.PruneOld(s.failsByIP[ip], now, cfg.Window)
 	count := len(s.failsByIP[ip])
 
-	if count < r.Threshold {
+	if count < cfg.Threshold {
 		return nil
 	}
 
 	last := s.lastAlertIP[ip]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		if id := s.lastAlertID[ip]; id != "" {
@@ -113,7 +120,7 @@ func (r *WebAuthBruteRule) Evaluate(event *model.NormalizedEvent, ctx *context.D
 		model.SeverityHigh,
 		"credential-access",
 		fmt.Sprintf("IP %s: %d auth failures in %v%s",
-			ip, count, r.Window,
+			ip, count, cfg.Window,
 			func() string {
 				if endpoint != "" {
 					return " on " + endpoint

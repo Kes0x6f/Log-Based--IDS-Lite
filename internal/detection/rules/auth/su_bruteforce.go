@@ -26,9 +26,16 @@ func NewSuBruteForceRule() *SuBruteForceRule {
 
 func (r *SuBruteForceRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "auth",
-		Program:    "su",
-		EventTypes: []string{"SU_FAIL"},
+		LogSource:   "auth",
+		Program:     "su",
+		EventTypes:  []string{"SU_FAIL"},
+		DisplayName: "SU Brute Force",
+		Description: "Multiple failed su attempts by the same user — password guessing against su.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   5,
+			WindowSec:   120,
+			CooldownSec: 120,
+		},
 	}
 }
 
@@ -57,7 +64,7 @@ func getSuBruteState(ctx *context.DetectionContext) *suBruteState {
 	return s
 }
 
-func (r *SuBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *SuBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getSuBruteState(ctx)
 	user := event.Username
 	now := event.Timestamp
@@ -69,14 +76,14 @@ func (r *SuBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context.D
 	for i := 0; i < event.EventCount; i++ {
 		s.failedByUser[user] = append(s.failedByUser[user], now)
 	}
-	s.failedByUser[user] = helper.PruneOld(s.failedByUser[user], now, r.Window)
+	s.failedByUser[user] = helper.PruneOld(s.failedByUser[user], now, cfg.Window)
 
-	if len(s.failedByUser[user]) < r.Threshold {
+	if len(s.failedByUser[user]) < cfg.Threshold {
 		return nil
 	}
 
 	last := s.lastAlertByUser[user]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		if id := s.lastAlertID[user]; id != "" {
@@ -100,7 +107,7 @@ func (r *SuBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context.D
 		"SU Brute Force",
 		model.SeverityHigh,
 		"privilege",
-		fmt.Sprintf("SU brute force by user %s targeting %s: %d failures in %v", user, targetAcct, totalCount, r.Window),
+		fmt.Sprintf("SU brute force by user %s targeting %s: %d failures in %v", user, targetAcct, totalCount, cfg.Window),
 		event,
 		totalCount,
 	)

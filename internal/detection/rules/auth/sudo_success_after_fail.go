@@ -24,12 +24,15 @@ func NewSudoSuccessAfterFailRule() *SudoSuccessAfterFailRule {
 
 func (r *SudoSuccessAfterFailRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource: "auth",
-		Program:   "sudo",
-		EventTypes: []string{
-			"SUDO_FAIL",
-			"SUDO_SESSION_START",
-			"SUDO_EXEC",
+		LogSource:   "auth",
+		Program:     "sudo",
+		EventTypes:  []string{"SUDO_FAIL", "SUDO_SESSION_START", "SUDO_EXEC"},
+		DisplayName: "SUDO Success After Failure",
+		Description: "sudo succeeds immediately following repeated failures — possible password guessing success.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   3,
+			WindowSec:   300,
+			CooldownSec: 300,
 		},
 	}
 }
@@ -57,7 +60,7 @@ func getSudoSuccessAfterFailState(ctx *context.DetectionContext) *sudoSuccessAft
 	return s
 }
 
-func (r *SudoSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *SudoSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 
 	s := getSudoSuccessAfterFailState(ctx)
 	recentFails := ctx.SudoShared.RecentFails
@@ -71,7 +74,7 @@ func (r *SudoSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *c
 			return nil
 		}
 		recentFails[user] = append(recentFails[user], now)
-		recentFails[user] = helper.PruneOld(recentFails[user], now, r.Window)
+		recentFails[user] = helper.PruneOld(recentFails[user], now, cfg.Window)
 		return nil
 
 	case "SUDO_EXEC":
@@ -93,10 +96,10 @@ func (r *SudoSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *c
 					// correlated user u — check if they had prior failures
 					failCount := len(recentFails[u])
 
-					if failCount >= r.Threshold {
+					if failCount >= cfg.Threshold {
 
 						last := s.lastAlert[u]
-						inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+						inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 						if inCooldown {
 							if id := s.lastAlertID[u]; id != "" {

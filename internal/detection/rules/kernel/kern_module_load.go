@@ -26,13 +26,16 @@ func NewKernModuleLoadRule() *KernModuleLoadRule {
 
 func (r *KernModuleLoadRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "kern",
-		Program:    "kernel",
-		EventTypes: []string{"KMOD_LOAD"},
+		LogSource:   "kern",
+		Program:     "kernel",
+		EventTypes:  []string{"KMOD_LOAD"},
+		DisplayName: "Kernel Module Load",
+		Description: "Out-of-tree or unsigned kernel module loaded — primary rootkit delivery mechanism.",
+		Defaults:    detection.RuleDefaults{},
 	}
 }
 
-func (r *KernModuleLoadRule) Evaluate(event *model.NormalizedEvent, _ *context.DetectionContext) []*model.Alert {
+func (r *KernModuleLoadRule) Evaluate(event *model.NormalizedEvent, _ *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	moduleName := event.Command
 	if moduleName == "" {
 		moduleName = "unknown"

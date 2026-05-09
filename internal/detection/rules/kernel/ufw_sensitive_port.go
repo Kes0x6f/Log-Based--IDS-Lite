@@ -60,9 +60,16 @@ func NewUFWSensitivePortRule() *UFWSensitivePortRule {
 
 func (r *UFWSensitivePortRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "ufw",
-		Program:    "kernel",
-		EventTypes: []string{"FW_BLOCK"},
+		LogSource:   "ufw",
+		Program:     "kernel",
+		EventTypes:  []string{"FW_BLOCK"},
+		DisplayName: "UFW Sensitive Port Probe",
+		Description: "Inbound probe on SSH, Telnet, RDP, databases, Docker, or Kubernetes. Severity varies by service.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   0,
+			WindowSec:   0,
+			CooldownSec: 600,
+		},
 	}
 }
 
@@ -92,7 +99,7 @@ func getUFWSensitivePortState(ctx *context.DetectionContext) *ufwSensitivePortSt
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *UFWSensitivePortRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *UFWSensitivePortRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getUFWSensitivePortState(ctx)
 	ip := event.SourceIP
 	port := event.Port
@@ -109,7 +116,7 @@ func (r *UFWSensitivePortRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 
 	key := ip + ":" + port
 	last := s.lastAlertByIPPort[key]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		if id := s.lastAlertID[key]; id != "" {

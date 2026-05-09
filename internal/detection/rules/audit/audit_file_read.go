@@ -89,9 +89,16 @@ func NewAuditFileReadRule() *AuditFileReadRule {
 
 func (r *AuditFileReadRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "audit",
-		Program:    "auditd",
-		EventTypes: []string{"FILE_READ"},
+		LogSource:   "audit",
+		Program:     "auditd",
+		EventTypes:  []string{"FILE_READ"},
+		DisplayName: "Sensitive File Read",
+		Description: "Process reads /etc/shadow, /etc/gshadow, /etc/sudoers, or ~/.ssh/authorized_keys.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   0,
+			WindowSec:   0,
+			CooldownSec: 300,
+		},
 	}
 }
 
@@ -120,7 +127,7 @@ func getAuditFileReadState(ctx *context.DetectionContext) *auditFileReadState {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *AuditFileReadRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *AuditFileReadRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getAuditFileReadState(ctx)
 	filePath := event.Command // name= from PATH record
 	user := event.Username
@@ -140,7 +147,7 @@ func (r *AuditFileReadRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 
 	key := user + ":" + filePath
 	last := s.lastAlertByKey[key]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		if id := s.lastAlertID[key]; id != "" {

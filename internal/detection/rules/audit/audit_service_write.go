@@ -69,13 +69,16 @@ func NewAuditServiceWriteRule() *AuditServiceWriteRule {
 
 func (r *AuditServiceWriteRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "audit",
-		Program:    "auditd",
-		EventTypes: []string{"SERVICE_WRITE"},
+		LogSource:   "audit",
+		Program:     "auditd",
+		EventTypes:  []string{"SERVICE_WRITE"},
+		DisplayName: "Systemd Service Created or Modified",
+		Description: "Systemd unit file written to system directories — boot-persistent execution backdoor.",
+		Defaults:    detection.RuleDefaults{},
 	}
 }
 
-func (r *AuditServiceWriteRule) Evaluate(event *model.NormalizedEvent, _ *context.DetectionContext) []*model.Alert {
+func (r *AuditServiceWriteRule) Evaluate(event *model.NormalizedEvent, _ *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	filePath := event.Command
 	user := event.Username
 

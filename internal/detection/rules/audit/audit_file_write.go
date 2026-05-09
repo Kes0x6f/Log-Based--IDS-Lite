@@ -34,9 +34,16 @@ func NewAuditFileWriteRule() *AuditFileWriteRule {
 
 func (r *AuditFileWriteRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "audit",
-		Program:    "auditd",
-		EventTypes: []string{"FILE_WRITE"},
+		LogSource:   "audit",
+		Program:     "auditd",
+		EventTypes:  []string{"FILE_WRITE"},
+		DisplayName: "Sensitive File Modified",
+		Description: "Write to /etc/passwd, /etc/shadow, /etc/sudoers, /root/.ssh, or /etc/hosts.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   0,
+			WindowSec:   0,
+			CooldownSec: 300,
+		},
 	}
 }
 
@@ -65,7 +72,7 @@ func getAuditFileWriteState(ctx *context.DetectionContext) *auditFileWriteState 
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *AuditFileWriteRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *AuditFileWriteRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getAuditFileWriteState(ctx)
 	filePath := event.Command
 	user := event.Username
@@ -77,7 +84,7 @@ func (r *AuditFileWriteRule) Evaluate(event *model.NormalizedEvent, ctx *context
 
 	key := user + ":" + filePath
 	last := s.lastAlertByKey[key]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		if id := s.lastAlertID[key]; id != "" {

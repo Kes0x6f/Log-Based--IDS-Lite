@@ -286,6 +286,14 @@ function render(){
 
 function eventHTML(a){
   const dotColor=SEV_DOT[a.Severity]||'#3d5070';
+  // Show TargetUser when it differs from Username — key info for brute-force timeline
+  const userTag = a.TargetUser&&a.TargetUser!==''
+    ? `<span style="font-size:10px;font-family:var(--font-mono);color:var(--text-3);margin-left:4px">→ ${esc(a.TargetUser)}</span>`
+    : '';
+  // Show FailCount when populated — gives scale at a glance
+  const failTag = a.FailCount>0
+    ? `<span style="font-size:10px;font-family:var(--font-mono);color:var(--red);margin-left:4px">${a.FailCount} fails</span>`
+    : '';
   return`<div class="tl-event">
     <div class="tl-left">
       <div class="tl-dot" style="border-color:${dotColor};background:${dotColor}22"></div>
@@ -296,6 +304,7 @@ function eventHTML(a){
         <span class="tl-ts">${fmtTs(a.Timestamp)}</span>
         ${pill(a.Severity)}
         <span class="tl-rule"><a href="/alert-detail.html?id=${encodeURIComponent(a.ID)}" style="color:var(--text);text-decoration:none">${esc(a.RuleName||'—')}</a></span>
+        ${userTag}${failTag}
         <span class="tl-cnt">×${a.EventCount||1}</span>
       </div>
       <div class="tl-msg">${esc(a.Message||'')}</div>

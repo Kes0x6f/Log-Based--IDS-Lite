@@ -35,3 +35,21 @@ func (r *RuleRegistry) GetRules(event *model.NormalizedEvent) []Rule {
 	}
 	return nil
 }
+
+func (r *RuleRegistry) AllRules() []Rule {
+	seen := make(map[Rule]struct{})
+	var out []Rule
+	for _, programs := range r.index {
+		for _, eventTypes := range programs {
+			for _, rules := range eventTypes {
+				for _, rule := range rules {
+					if _, ok := seen[rule]; !ok {
+						seen[rule] = struct{}{}
+						out = append(out, rule)
+					}
+				}
+			}
+		}
+	}
+	return out
+}

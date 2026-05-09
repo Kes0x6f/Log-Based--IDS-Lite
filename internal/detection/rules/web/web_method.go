@@ -59,9 +59,16 @@ func NewWebMethodRule() *WebMethodRule {
 
 func (r *WebMethodRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "web",
-		Program:    "httpd",
-		EventTypes: []string{"HTTP_METHOD"},
+		LogSource:   "web",
+		Program:     "httpd",
+		EventTypes:  []string{"HTTP_METHOD"},
+		DisplayName: "Unusual HTTP Method",
+		Description: "TRACE, CONNECT, OPTIONS, PUT, DELETE, or PATCH used — recon or file manipulation attempt.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   0,
+			WindowSec:   0,
+			CooldownSec: 900,
+		},
 	}
 }
 
@@ -92,7 +99,7 @@ func getWebMethodState(ctx *context.DetectionContext) *webMethodState {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *WebMethodRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *WebMethodRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	ip := event.SourceIP
 	now := event.Timestamp
 

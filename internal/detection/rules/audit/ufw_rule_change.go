@@ -43,9 +43,16 @@ func NewUFWRuleChangeRule() *UFWRuleChangeRule {
 
 func (r *UFWRuleChangeRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "audit",
-		Program:    "auditd",
-		EventTypes: []string{"UFW_RULE_CHANGE"},
+		LogSource:   "audit",
+		Program:     "auditd",
+		EventTypes:  []string{"UFW_RULE_CHANGE"},
+		DisplayName: "UFW Firewall Rule Changed",
+		Description: "Write to /etc/ufw/user.rules detected via auditd — attackers weaken the firewall after gaining root.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   0,
+			WindowSec:   0,
+			CooldownSec: 300,
+		},
 	}
 }
 
@@ -76,7 +83,7 @@ func getUFWRuleChangeState(ctx *context.DetectionContext) *ufwRuleChangeState {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *UFWRuleChangeRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *UFWRuleChangeRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getUFWRuleChangeState(ctx)
 	filePath := event.Command // name= from audit PATH record
 	user := event.Username
@@ -97,7 +104,7 @@ func (r *UFWRuleChangeRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 	count := s.countByKey[key]
 
 	last := s.lastAlertByKey[key]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 	if inCooldown {
 		if id := s.lastAlertID[key]; id != "" {
 			return []*model.Alert{{

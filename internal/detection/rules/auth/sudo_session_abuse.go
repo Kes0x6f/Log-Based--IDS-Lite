@@ -24,11 +24,15 @@ func NewSudoSessionAbuseRule() *SudoSessionAbuseRule {
 
 func (r *SudoSessionAbuseRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource: "auth",
-		Program:   "sudo",
-		EventTypes: []string{
-			"SUDO_EXEC",
-			"SUDO_SESSION_START",
+		LogSource:   "auth",
+		Program:     "sudo",
+		EventTypes:  []string{"SUDO_EXEC", "SUDO_SESSION_START"},
+		DisplayName: "SUDO Session Abuse",
+		Description: "User opens 4+ sudo sessions within 2 minutes — session thrashing pattern.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   4,
+			WindowSec:   120,
+			CooldownSec: 120,
 		},
 	}
 }
@@ -60,7 +64,7 @@ func getSudoSessionAbuseState(ctx *context.DetectionContext) *sudoSessionAbuseSt
 	return s
 }
 
-func (r *SudoSessionAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *SudoSessionAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 
 	s := getSudoSessionAbuseState(ctx)
 	now := event.Timestamp
@@ -85,14 +89,14 @@ func (r *SudoSessionAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 				if now.Sub(execTime) <= 100*time.Second {
 
 					s.sessionStartsByUser[u] = append(s.sessionStartsByUser[u], now)
-					s.sessionStartsByUser[u] = helper.PruneOld(s.sessionStartsByUser[u], now, r.Window)
+					s.sessionStartsByUser[u] = helper.PruneOld(s.sessionStartsByUser[u], now, cfg.Window)
 
 					count := len(s.sessionStartsByUser[u])
 
-					if count >= r.Threshold {
+					if count >= cfg.Threshold {
 
 						last := s.lastSessionAlert[u]
-						inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+						inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 						if inCooldown {
 							if id := s.lastAlertID[u]; id != "" {
@@ -111,7 +115,7 @@ func (r *SudoSessionAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 							"SUDO Session Abuse",
 							model.SeverityMedium,
 							"privilege",
-							fmt.Sprintf("User %s opened %d sudo sessions in %v", u, count, r.Window),
+							fmt.Sprintf("User %s opened %d sudo sessions in %v", u, count, cfg.Window),
 							event,
 							count,
 						)

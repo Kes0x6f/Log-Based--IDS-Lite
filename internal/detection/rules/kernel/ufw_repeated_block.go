@@ -27,9 +27,16 @@ func NewUFWRepeatedBlockRule() *UFWRepeatedBlockRule {
 
 func (r *UFWRepeatedBlockRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "ufw",
-		Program:    "kernel",
-		EventTypes: []string{"FW_BLOCK"},
+		LogSource:   "ufw",
+		Program:     "kernel",
+		EventTypes:  []string{"FW_BLOCK"},
+		DisplayName: "UFW Repeated Block",
+		Description: "Same source IP accumulates 20+ firewall blocks in 2 minutes — persistent probing.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   20,
+			WindowSec:   120,
+			CooldownSec: 120,
+		},
 	}
 }
 
@@ -62,7 +69,7 @@ func getUFWRepeatedBlockState(ctx *context.DetectionContext) *ufwRepeatedBlockSt
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *UFWRepeatedBlockRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *UFWRepeatedBlockRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getUFWRepeatedBlockState(ctx)
 	ip := event.SourceIP
 	now := event.Timestamp
@@ -74,15 +81,15 @@ func (r *UFWRepeatedBlockRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 	for i := 0; i < event.EventCount; i++ {
 		s.blocksByIP[ip] = append(s.blocksByIP[ip], now)
 	}
-	s.blocksByIP[ip] = helper.PruneOld(s.blocksByIP[ip], now, r.Window)
+	s.blocksByIP[ip] = helper.PruneOld(s.blocksByIP[ip], now, cfg.Window)
 
 	count := len(s.blocksByIP[ip])
-	if count < r.Threshold {
+	if count < cfg.Threshold {
 		return nil
 	}
 
 	last := s.lastAlertIP[ip]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		s.runningCount[ip] += event.EventCount
@@ -102,7 +109,7 @@ func (r *UFWRepeatedBlockRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 		"UFW Repeated Block",
 		model.SeverityMedium,
 		"reconnaissance",
-		fmt.Sprintf("IP %s blocked %d times within %v", ip, count, r.Window),
+		fmt.Sprintf("IP %s blocked %d times within %v", ip, count, cfg.Window),
 		event,
 		count,
 	)

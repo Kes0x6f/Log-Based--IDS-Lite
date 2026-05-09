@@ -25,10 +25,15 @@ func NewSudoCommandAbuseRule() *SudoCommandAbuseRule {
 
 func (r *SudoCommandAbuseRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource: "auth",
-		Program:   "sudo",
-		EventTypes: []string{
-			"SUDO_EXEC",
+		LogSource:   "auth",
+		Program:     "sudo",
+		EventTypes:  []string{"SUDO_EXEC"},
+		DisplayName: "SUDO Command Abuse",
+		Description: "User executes 5+ sudo commands within 2 minutes — abnormal elevated-privilege usage rate.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   5,
+			WindowSec:   120,
+			CooldownSec: 120,
 		},
 	}
 }
@@ -60,7 +65,7 @@ func getSudoCommandAbuseState(ctx *context.DetectionContext) *sudoCommandAbuseSt
 	return s
 }
 
-func (r *SudoCommandAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *SudoCommandAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 
 	s := getSudoCommandAbuseState(ctx)
 	commandsByUser := ctx.SudoShared.CommandsByUser
@@ -77,7 +82,7 @@ func (r *SudoCommandAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 	}
 
 	ctx.SudoShared.CommandsByUser[user] = append(ctx.SudoShared.CommandsByUser[user], now)
-	ctx.SudoShared.CommandsByUser[user] = helper.PruneOld(ctx.SudoShared.CommandsByUser[user], now, r.Window)
+	ctx.SudoShared.CommandsByUser[user] = helper.PruneOld(ctx.SudoShared.CommandsByUser[user], now, cfg.Window)
 	count := len(ctx.SudoShared.CommandsByUser[user])
 
 	if event.Command != "" {
@@ -87,12 +92,12 @@ func (r *SudoCommandAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 		}
 	}
 
-	if count < r.Threshold {
+	if count < cfg.Threshold {
 		return nil
 	}
 
 	last := s.lastAbuseAlert[user]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		originalID := s.lastAlertID[user]
@@ -122,7 +127,7 @@ func (r *SudoCommandAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 		"SUDO Command Abuse",
 		model.SeverityHigh,
 		"privilege",
-		fmt.Sprintf("User %s executed %d sudo commands in %v", user, count, r.Window),
+		fmt.Sprintf("User %s executed %d sudo commands in %v", user, count, cfg.Window),
 		event,
 		count,
 	)

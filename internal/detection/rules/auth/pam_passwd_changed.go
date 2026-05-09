@@ -25,13 +25,16 @@ func NewPasswdChangedRule() *PasswdChangedRule {
 
 func (r *PasswdChangedRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "auth",
-		Program:    "passwd",
-		EventTypes: []string{"PASSWD_CHANGED"},
+		LogSource:   "auth",
+		Program:     "passwd",
+		EventTypes:  []string{"PASSWD_CHANGED"},
+		DisplayName: "Password Changed",
+		Description: "Password changed for any account; CRITICAL when account is root, daemon, or nobody.",
+		Defaults:    detection.RuleDefaults{},
 	}
 }
 
-func (r *PasswdChangedRule) Evaluate(event *model.NormalizedEvent, _ *context.DetectionContext) []*model.Alert {
+func (r *PasswdChangedRule) Evaluate(event *model.NormalizedEvent, _ *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	if event.Username == "" {
 		return nil
 	}

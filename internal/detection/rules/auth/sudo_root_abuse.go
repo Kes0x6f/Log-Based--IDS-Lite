@@ -24,11 +24,15 @@ func NewSudoRootAbuseRule() *SudoRootAbuseRule {
 
 func (r *SudoRootAbuseRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource: "auth",
-		Program:   "sudo",
-		EventTypes: []string{
-			"SUDO_EXEC",
-			"SUDO_SESSION_START",
+		LogSource:   "auth",
+		Program:     "sudo",
+		EventTypes:  []string{"SUDO_EXEC", "SUDO_SESSION_START"},
+		DisplayName: "SUDO Root Abuse",
+		Description: "User escalates to root via sudo 5+ times within 2 minutes.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   5,
+			WindowSec:   120,
+			CooldownSec: 120,
 		},
 	}
 }
@@ -60,7 +64,7 @@ func getSudoRootAbuseState(ctx *context.DetectionContext) *sudoRootAbuseState {
 	return s
 }
 
-func (r *SudoRootAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *SudoRootAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 
 	s := getSudoRootAbuseState(ctx)
 	user := event.Username
@@ -89,14 +93,14 @@ func (r *SudoRootAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 					}
 
 					s.rootSessionsByUser[u] = append(s.rootSessionsByUser[u], now)
-					s.rootSessionsByUser[u] = helper.PruneOld(s.rootSessionsByUser[u], now, r.Window)
+					s.rootSessionsByUser[u] = helper.PruneOld(s.rootSessionsByUser[u], now, cfg.Window)
 
 					count := len(s.rootSessionsByUser[u])
 
-					if count >= r.Threshold {
+					if count >= cfg.Threshold {
 
 						last := s.lastRootAlert[u]
-						inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+						inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 						if inCooldown {
 							if id := s.lastAlertID[u]; id != "" {
@@ -114,7 +118,7 @@ func (r *SudoRootAbuseRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 							"SUDO Root Abuse",
 							model.SeverityHigh,
 							"privilege",
-							fmt.Sprintf("User %s escalated to root %d times in %v", u, count, r.Window),
+							fmt.Sprintf("User %s escalated to root %d times in %v", u, count, cfg.Window),
 							event,
 							count,
 						)

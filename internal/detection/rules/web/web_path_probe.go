@@ -80,9 +80,16 @@ func NewWebPathProbeRule() *WebPathProbeRule {
 
 func (r *WebPathProbeRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "web",
-		Program:    "httpd",
-		EventTypes: []string{"HTTP_PROBE"},
+		LogSource:   "web",
+		Program:     "httpd",
+		EventTypes:  []string{"HTTP_PROBE"},
+		DisplayName: "Web Path Probe",
+		Description: "URI contains attack patterns: RCE/command injection, SQL injection, XSS, directory traversal.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   0,
+			WindowSec:   0,
+			CooldownSec: 300,
+		},
 	}
 }
 
@@ -113,7 +120,7 @@ func getWebPathProbeState(ctx *context.DetectionContext) *webPathProbeState {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *WebPathProbeRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *WebPathProbeRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	ip := event.SourceIP
 	now := event.Timestamp
 
@@ -154,7 +161,7 @@ func (r *WebPathProbeRule) Evaluate(event *model.NormalizedEvent, ctx *context.D
 	count := s.countByKey[key]
 
 	last := s.lastAlertByKey[key]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		if id := s.lastAlertID[key]; id != "" {

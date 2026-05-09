@@ -31,13 +31,16 @@ func NewGroupModifiedRule() *GroupModifiedRule {
 
 func (r *GroupModifiedRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "auth",
-		Program:    "usermod",
-		EventTypes: []string{"GROUP_MODIFIED"},
+		LogSource:   "auth",
+		Program:     "usermod",
+		EventTypes:  []string{"GROUP_MODIFIED"},
+		DisplayName: "Group Membership Changed",
+		Description: "User added to a group; CRITICAL when group grants elevated privilege.",
+		Defaults:    detection.RuleDefaults{},
 	}
 }
 
-func (r *GroupModifiedRule) Evaluate(event *model.NormalizedEvent, _ *context.DetectionContext) []*model.Alert {
+func (r *GroupModifiedRule) Evaluate(event *model.NormalizedEvent, _ *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	if event.Username == "" {
 		return nil
 	}

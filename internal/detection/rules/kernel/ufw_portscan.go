@@ -29,9 +29,16 @@ func NewUFWPortScanRule() *UFWPortScanRule {
 
 func (r *UFWPortScanRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "ufw",
-		Program:    "kernel",
-		EventTypes: []string{"FW_BLOCK"},
+		LogSource:   "ufw",
+		Program:     "kernel",
+		EventTypes:  []string{"FW_BLOCK"},
+		DisplayName: "UFW Port Scan Detected",
+		Description: "Single source IP hits 10+ distinct destination ports within 1 minute — automated scan.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   6,
+			WindowSec:   60,
+			CooldownSec: 300,
+		},
 	}
 }
 
@@ -63,7 +70,7 @@ func getUFWPortScanState(ctx *context.DetectionContext) *ufwPortScanState {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *UFWPortScanRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *UFWPortScanRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getUFWPortScanState(ctx)
 	ip := event.SourceIP
 	port := event.Port
@@ -82,18 +89,18 @@ func (r *UFWPortScanRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 
 	// Prune ports older than the window
 	for p, t := range s.portsByIP[ip] {
-		if now.Sub(t) > r.Window {
+		if now.Sub(t) > cfg.Window {
 			delete(s.portsByIP[ip], p)
 		}
 	}
 
 	distinctPorts := len(s.portsByIP[ip])
-	if distinctPorts < r.Threshold {
+	if distinctPorts < cfg.Threshold {
 		return nil
 	}
 
 	last := s.lastAlertIP[ip]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		if id := s.lastAlertID[ip]; id != "" {

@@ -40,9 +40,16 @@ func NewAuditSetuidRule() *AuditSetuidRule {
 
 func (r *AuditSetuidRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "audit",
-		Program:    "auditd",
-		EventTypes: []string{"SETUID"},
+		LogSource:   "audit",
+		Program:     "auditd",
+		EventTypes:  []string{"SETUID"},
+		DisplayName: "Setuid Bit Set on Binary",
+		Description: "chmod sets setuid bit on a binary — creates a root-access backdoor executable.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   0,
+			WindowSec:   0,
+			CooldownSec: 900,
+		},
 	}
 }
 
@@ -75,7 +82,7 @@ func getAuditSetuidState(ctx *context.DetectionContext) *auditSetuidState {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *AuditSetuidRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *AuditSetuidRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getAuditSetuidState(ctx)
 	binPath := event.Command // name= from PATH record (verified setuid by parser)
 	user := event.Username
@@ -91,7 +98,7 @@ func (r *AuditSetuidRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 	key := user + ":" + binPath
 
 	last := s.lastAlertByKey[key]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		if id := s.lastAlertID[key]; id != "" {

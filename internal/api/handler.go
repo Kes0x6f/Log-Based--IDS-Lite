@@ -10,14 +10,17 @@ import (
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/collector"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/database"
+	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
 	"github.com/Kes0x6f/Log-Based--IDS/internal/stream"
 )
 
 type Handler struct {
-	Repo         *database.AlertRepository
-	SettingsRepo *database.SettingsRepository
-	Broadcaster  *stream.Broadcaster
-	Stats        *collector.SourceStats
+	Repo           *database.AlertRepository
+	SettingsRepo   *database.SettingsRepository
+	Broadcaster    *stream.Broadcaster
+	Stats          *collector.SourceStats
+	RuleConfigRepo *database.RuleConfigRepository
+	Engine         *detection.Engine
 }
 
 // ── /alerts ───────────────────────────────────────────────────────────────────
@@ -350,6 +353,18 @@ func (h *Handler) UpdateSetting(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// For global sensitivity keys, invalidate the engine cache immediately so
+	// the change takes effect on the next event rather than waiting for the TTL.
+	sensitivityKeys := map[string]bool{
+		"global-threshold-mul": true,
+		"global-window-sec":    true,
+		"global-cooldown-sec":  true,
+	}
+	if sensitivityKeys[body.Key] && h.Engine != nil {
+		h.Engine.InvalidateCache()
+	}
+
 	jsonOK(w, map[string]string{"key": body.Key, "value": body.Value})
 }
 
@@ -359,3 +374,398 @@ func jsonOK(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
 }
+
+// ── /rules ────────────────────────────────────────────────────────────────────
+
+// GetRuleList handles GET /rules
+//
+// Returns every registered rule with its compiled defaults, any active DB
+// override, the merged effective config, the enabled flag, and aggregate
+// alert stats.
+func (h *Handler) GetRuleList(w http.ResponseWriter, r *http.Request) {
+	if h.Engine == nil {
+		http.Error(w, "engine not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	metas := h.Engine.DescribeAll()
+
+	overrides := map[string]database.RuleConfig{}
+	if h.RuleConfigRepo != nil {
+		var err error
+		overrides, err = h.RuleConfigRepo.GetAll()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Non-fatal: if stats fail we just show zero counts.
+	ruleStats, _ := h.Repo.RuleStats()
+
+	type limitsShape struct {
+		Threshold   int `json:"threshold"`
+		WindowSec   int `json:"window_sec"`
+		CooldownSec int `json:"cooldown_sec"`
+	}
+	type overrideShape struct {
+		Threshold   *int `json:"threshold"`
+		WindowSec   *int `json:"window_sec"`
+		CooldownSec *int `json:"cooldown_sec"`
+	}
+	type ruleRow struct {
+		Name        string        `json:"name"`
+		LogSource   string        `json:"log_source"`
+		Program     string        `json:"program"`
+		Description string        `json:"description"`
+		Defaults    limitsShape   `json:"defaults"`
+		Override    overrideShape `json:"override"`
+		Effective   limitsShape   `json:"effective"`
+		Enabled     bool          `json:"enabled"`
+		FireCount   int           `json:"fire_count"`
+		LastFired   *time.Time    `json:"last_fired"`
+	}
+
+	result := make([]ruleRow, 0, len(metas))
+	for _, meta := range metas {
+		cfg := h.Engine.Resolve(meta)
+
+		var ov overrideShape
+		if o, ok := overrides[meta.DisplayName]; ok {
+			ov.Threshold = o.Threshold
+			ov.WindowSec = o.WindowSec
+			ov.CooldownSec = o.CooldownSec
+		}
+
+		var fireCount int
+		var lastFired *time.Time
+		if s, ok := ruleStats[meta.DisplayName]; ok {
+			fireCount = s.Count
+			lastFired = s.LastFired
+		}
+
+		result = append(result, ruleRow{
+			Name:        meta.DisplayName,
+			LogSource:   meta.LogSource,
+			Program:     meta.Program,
+			Description: meta.Description,
+			Defaults: limitsShape{
+				Threshold:   meta.Defaults.Threshold,
+				WindowSec:   meta.Defaults.WindowSec,
+				CooldownSec: meta.Defaults.CooldownSec,
+			},
+			Override: ov,
+			Effective: limitsShape{
+				Threshold:   cfg.Threshold,
+				WindowSec:   int(cfg.Window.Seconds()),
+				CooldownSec: int(cfg.Cooldown.Seconds()),
+			},
+			Enabled:   cfg.Enabled,
+			FireCount: fireCount,
+			LastFired: lastFired,
+		})
+	}
+
+	jsonOK(w, result)
+}
+
+// ── /rule-configs ─────────────────────────────────────────────────────────────
+
+// GetRuleConfigMap handles GET /rule-configs
+//
+// Returns every row in rule_config as a name→config map.
+func (h *Handler) GetRuleConfigMap(w http.ResponseWriter, r *http.Request) {
+	if h.RuleConfigRepo == nil {
+		jsonOK(w, map[string]interface{}{})
+		return
+	}
+	all, err := h.RuleConfigRepo.GetAll()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, all)
+}
+
+// UpsertRuleConfig handles POST /rule-configs
+//
+// Inserts or replaces a rule's config row. Omit (send null for) any field you want to leave at its compiled default.
+func (h *Handler) UpsertRuleConfig(w http.ResponseWriter, r *http.Request) {
+	if h.RuleConfigRepo == nil {
+		http.Error(w, "rule config repo not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	var body struct {
+		RuleName    string `json:"rule_name"`
+		Threshold   *int   `json:"threshold"`
+		WindowSec   *int   `json:"window_sec"`
+		CooldownSec *int   `json:"cooldown_sec"`
+		Enabled     bool   `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if body.RuleName == "" {
+		http.Error(w, "rule_name is required", http.StatusBadRequest)
+		return
+	}
+	if body.Threshold != nil && *body.Threshold < 1 {
+		http.Error(w, "threshold must be >= 1", http.StatusBadRequest)
+		return
+	}
+	if body.WindowSec != nil && *body.WindowSec < 10 {
+		http.Error(w, "window_sec must be >= 10 seconds", http.StatusBadRequest)
+		return
+	}
+	if body.CooldownSec != nil && *body.CooldownSec < 0 {
+		http.Error(w, "cooldown_sec must be >= 0", http.StatusBadRequest)
+		return
+	}
+
+	cfg := database.RuleConfig{
+		RuleName:    body.RuleName,
+		Threshold:   body.Threshold,
+		WindowSec:   body.WindowSec,
+		CooldownSec: body.CooldownSec,
+		Enabled:     body.Enabled,
+	}
+	if err := h.RuleConfigRepo.Upsert(cfg); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if h.Engine != nil {
+		h.Engine.InvalidateCache()
+	}
+
+	jsonOK(w, map[string]string{"status": "saved", "rule_name": body.RuleName})
+}
+
+// ResetRuleConfig handles DELETE /rule-configs?rule=...
+// Removes a single rule's override row, reverting it to compiled defaults.
+func (h *Handler) ResetRuleConfig(w http.ResponseWriter, r *http.Request) {
+	if h.RuleConfigRepo == nil {
+		http.Error(w, "rule config repo not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	ruleName := r.URL.Query().Get("rule")
+	if ruleName == "" {
+		http.Error(w, "rule query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.RuleConfigRepo.Reset(ruleName); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if h.Engine != nil {
+		h.Engine.InvalidateCache()
+	}
+
+	jsonOK(w, map[string]string{"status": "reset", "rule_name": ruleName})
+}
+
+// ResetAllRuleConfigs handles DELETE /rule-configs (no rule param)
+// Removes every override row, reverting all rules to compiled defaults.
+func (h *Handler) ResetAllRuleConfigs(w http.ResponseWriter, r *http.Request) {
+	if h.RuleConfigRepo == nil {
+		http.Error(w, "rule config repo not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := h.RuleConfigRepo.ResetAll(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if h.Engine != nil {
+		h.Engine.InvalidateCache()
+	}
+
+	jsonOK(w, map[string]string{"status": "all overrides removed"})
+}
+
+func (h *Handler) GetRuleConfigHistory(w http.ResponseWriter, r *http.Request) {
+	if h.RuleConfigRepo == nil {
+		jsonOK(w, []interface{}{})
+		return
+	}
+
+	ruleName := r.URL.Query().Get("rule")
+	if ruleName == "" {
+		http.Error(w, "rule query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	limit := 10
+	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 100 {
+		limit = l
+	}
+
+	history, err := h.RuleConfigRepo.GetHistory(ruleName, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if history == nil {
+		history = []database.RuleConfigHistory{}
+	}
+
+	jsonOK(w, history)
+}
+
+// ── /rule-configs/simulate ────────────────────────────────────────────────────
+
+// SimulateRuleConfig handles POST /rule-configs/simulate
+//
+// Estimates how many alerts would have fired in the lookback window if the
+// proposed config had been active. Uses stored alert history as a proxy for
+// raw events — see warnings in the response for limitations.
+//
+//	Threshold simulation: counts alerts where EventCount ≥ proposed_threshold.
+//	                      Underestimates for threshold decreases because events
+//	                      below the original threshold were never stored.
+//	Cooldown simulation:  walks alerts chronologically and applies the new
+//	                      cooldown gap. Accurate for cooldown-only changes.
+//	Window simulation:    cannot be estimated from alert data; a warning is
+//	                      returned and the field is otherwise ignored.
+func (h *Handler) SimulateRuleConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var body struct {
+		RuleName      string `json:"rule_name"`
+		Threshold     *int   `json:"threshold"`
+		WindowSec     *int   `json:"window_sec"`
+		CooldownSec   *int   `json:"cooldown_sec"`
+		LookbackHours int    `json:"lookback_hours"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if body.RuleName == "" {
+		http.Error(w, "rule_name is required", http.StatusBadRequest)
+		return
+	}
+	if body.Threshold != nil && *body.Threshold < 1 {
+		http.Error(w, "threshold must be >= 1", http.StatusBadRequest)
+		return
+	}
+	if body.LookbackHours <= 0 || body.LookbackHours > 168 {
+		body.LookbackHours = 24
+	}
+
+	// ── Look up compiled default threshold for the comparison warning ────────
+	compiledThreshold := 0
+	if h.Engine != nil {
+		for _, meta := range h.Engine.DescribeAll() {
+			if meta.DisplayName == body.RuleName {
+				compiledThreshold = meta.Defaults.Threshold
+				break
+			}
+		}
+	}
+
+	// ── Fetch alert history for this rule ────────────────────────────────────
+	since := time.Now().Add(-time.Duration(body.LookbackHours) * time.Hour)
+	sinceStr := since.Format(time.RFC3339)
+
+	alerts, err := h.Repo.GetAlerts("", "", "", body.RuleName, sinceStr, 10000)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	actualCount := len(alerts)
+	var warnings []string
+
+	// ── Step 1: threshold filter ──────────────────────────────────────────────
+	// Keep only alerts whose EventCount reaches the proposed threshold.
+	// alerts is sorted DESC from the DB; preserve order for the cooldown walk.
+	candidates := alerts
+	if body.Threshold != nil {
+		newT := *body.Threshold
+		n := 0
+		for _, a := range alerts {
+			if a.EventCount >= newT {
+				alerts[n] = a
+				n++
+			}
+		}
+		candidates = alerts[:n]
+
+		// If the new threshold is lower than (or equal to) the compiled default,
+		// there may be raw events between stored alerts that would now also fire
+		// but are invisible to us.
+		if compiledThreshold == 0 || newT <= compiledThreshold {
+			warnings = append(warnings,
+				"Lowering or matching the compiled threshold may produce more alerts "+
+					"than shown — events that fell below the original threshold "+
+					"were never stored and cannot be counted.")
+		}
+	}
+
+	// ── Step 2: cooldown simulation ───────────────────────────────────────────
+	// Walk candidates in chronological order (reverse of DESC-sorted slice)
+	// and apply the proposed cooldown gap between consecutive alerts.
+	simulated := len(candidates)
+	if body.CooldownSec != nil {
+		newCooldown := time.Duration(*body.CooldownSec) * time.Second
+		fires := 0
+		var lastFire time.Time
+		for i := len(candidates) - 1; i >= 0; i-- {
+			a := candidates[i]
+			if lastFire.IsZero() || a.Timestamp.Sub(lastFire) >= newCooldown {
+				fires++
+				lastFire = a.Timestamp
+			}
+		}
+		simulated = fires
+		if newCooldown == 0 {
+			warnings = append(warnings,
+				"Cooldown of 0 seconds means every event fires a new alert — "+
+					"this may produce very high alert volume during attacks.")
+		}
+	}
+
+	// ── Step 3: window note ───────────────────────────────────────────────────
+	if body.WindowSec != nil {
+		warnings = append(warnings,
+			"Window changes cannot be simulated from alert history — "+
+				"raw per-event timestamps are required for accurate results. "+
+				"Save the change and monitor live behaviour instead.")
+	}
+
+	// ── Build response ────────────────────────────────────────────────────────
+	delta := simulated - actualCount
+	deltaStr := fmt.Sprintf("%+d", delta)
+	if delta == 0 {
+		deltaStr = "±0"
+	}
+
+	resp := map[string]interface{}{
+		"rule_name":             body.RuleName,
+		"lookback_hours":        body.LookbackHours,
+		"actual_alert_count":    actualCount,
+		"simulated_alert_count": simulated,
+		"delta":                 deltaStr,
+	}
+	if len(warnings) > 0 {
+		resp["warnings"] = warnings
+	} else {
+		resp["warnings"] = []string{}
+	}
+
+	jsonOK(w, resp)
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+// (keep existing jsonOK below)

@@ -113,6 +113,62 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:2px}
+/* ── Rule config edit panel ───────────────────────────────────────────── */
+.customised-dot{width:6px;height:6px;border-radius:50%;background:var(--amber);
+  flex-shrink:0;box-shadow:0 0 4px var(--amber)}
+.customised-badge{font-size:9px;font-family:var(--font-mono);padding:1px 6px;
+  border-radius:3px;background:var(--amber-dim);color:var(--amber);letter-spacing:.04em}
+
+/* Disabled rule — muted card */
+.rcard.disabled{opacity:.5}
+.rcard.disabled .rcard-name::after{
+  content:' [disabled]';font-size:9px;font-family:var(--font-mono);
+  color:var(--text-3);font-weight:400}
+
+/* Edit toggle button in card top-right */
+.edit-btn{background:transparent;border:1px solid var(--border);border-radius:4px;
+  color:var(--text-3);font-family:var(--font-mono);font-size:10px;padding:3px 8px;
+  cursor:pointer;transition:color .12s,border-color .12s;flex-shrink:0}
+.edit-btn:hover,.edit-btn.open{color:var(--accent);border-color:rgba(56,189,248,.3)}
+
+/* Expandable edit panel */
+.rcard-edit{display:none;padding:10px 0 2px;border-top:1px solid var(--border);margin-top:8px}
+.rcard-edit.open{display:block}
+.edit-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.edit-lbl{font-size:10px;color:var(--text-3);font-weight:500;min-width:120px;
+  flex-shrink:0;letter-spacing:.02em}
+.edit-hint{font-size:9px;color:var(--text-3);font-family:var(--font-mono)}
+.r-input{background:var(--surface-2);border:1px solid var(--border);border-radius:4px;
+  color:var(--text);font-family:var(--font-mono);font-size:11px;padding:4px 8px;
+  outline:none;width:88px;transition:border-color .2s}
+.r-input:focus{border-color:var(--accent)}
+.r-input::placeholder{color:var(--text-3)}
+.edit-actions{display:flex;align-items:center;gap:8px;margin-top:9px;
+  padding-top:8px;border-top:1px solid var(--border)}
+.edit-save{background:var(--accent);border:none;border-radius:4px;color:#07090f;
+  font-family:var(--font-mono);font-size:11px;font-weight:500;padding:5px 14px;
+  cursor:pointer;transition:opacity .15s}
+.edit-save:hover{opacity:.85}
+.edit-reset-btn{background:transparent;border:1px solid var(--border);border-radius:4px;
+  color:var(--text-3);font-family:var(--font-mono);font-size:10px;padding:4px 10px;
+  cursor:pointer;transition:color .12s,border-color .12s}
+.edit-reset-btn:hover{color:var(--red);border-color:rgba(248,113,113,.3)}
+.edit-feedback{font-size:10px;font-family:var(--font-mono);color:var(--text-3);
+  min-height:16px;margin-top:5px}
+.edit-feedback.ok{color:var(--green)}
+.edit-feedback.err{color:var(--red)}
+
+/* Enabled toggle — same mechanism as settings.html */
+.r-toggle{position:relative;width:36px;height:20px;flex-shrink:0;cursor:pointer}
+.r-toggle input{opacity:0;width:0;height:0;position:absolute}
+.r-toggle-track{position:absolute;inset:0;background:var(--surface-3);border-radius:20px;
+  border:1px solid var(--border-2);transition:background .2s,border-color .2s}
+.r-toggle input:checked+.r-toggle-track{background:var(--accent-dim);
+  border-color:rgba(56,189,248,.4)}
+.r-toggle-thumb{position:absolute;top:3px;left:3px;width:12px;height:12px;
+  background:var(--text-3);border-radius:50%;
+  transition:transform .2s,background .2s;pointer-events:none}
+.r-toggle input:checked~.r-toggle-thumb{transform:translateX(16px);background:var(--accent)}
 </style>
 </head>
 <body>
@@ -225,6 +281,7 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
         <option value="last">Sort: last fired</option>
       </select>
       <button class="f-btn" onclick="clearFilters()">✕ clear</button>
+      <button class="f-btn" id="btn-reset-all" onclick="resetAllConfigs()" style="display:none">↺ reset all limits</button>
     </div>
     <div class="stats-txt" id="stats-txt">loading…</div>
 
@@ -294,6 +351,318 @@ const SEV_ORD = {CRITICAL:4,HIGH:3,MEDIUM:2,LOW:1,varies:0};
 let fireCounts = {}, lastFired = {}, alertData = [];
 const LIMIT = parseInt(localStorage.getItem('ids-alerts-limit') || '2000');
 
+// ── Rule config state ──────────────────────────────────────────────────────
+// Populated by loadRuleConfigs(). Maps rule_name → DB override row.
+let ruleConfigs = {};
+
+// Converts "SSH Brute Force" → "SSH_Brute_Force" for stable DOM IDs.
+const ruleId = name => name.replace(/[^a-zA-Z0-9]/g, '_');
+
+// Escapes single quotes for safe use in inline onclick="..." attributes.
+const safeJs = s => String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+// ── Load DB overrides ──────────────────────────────────────────────────────
+async function loadRuleConfigs() {
+  try {
+    const r = await fetch('/rule-configs');
+    ruleConfigs = r.ok ? (await r.json() ?? {}) : {};
+  } catch {
+    ruleConfigs = {};
+  }
+}
+
+// ── Edit panel toggle ──────────────────────────────────────────────────────
+function toggleEdit(rid) {
+  const panel = document.getElementById('edit-' + rid);
+  const btn   = document.getElementById('ebtn-' + rid);
+  if (!panel) return;
+  const open = panel.classList.toggle('open');
+  if (btn) btn.classList.toggle('open', open);
+}
+
+// ── Save a rule's config override ─────────────────────────────────────────
+async function saveConfig(rid, name) {
+  const thRaw = document.getElementById('th-' + rid)?.value.trim();
+  const wsRaw = document.getElementById('ws-' + rid)?.value.trim();
+  const csRaw = document.getElementById('cs-' + rid)?.value.trim();
+  const enabled = document.getElementById('en-' + rid)?.checked ?? true;
+  const fb = document.getElementById('fb-' + rid);
+
+  // Client-side validation
+  if (thRaw && (isNaN(thRaw) || parseInt(thRaw, 10) < 1)) {
+    if (fb) { fb.textContent = '✗ threshold must be ≥ 1'; fb.className = 'edit-feedback err'; }
+    return;
+  }
+  if (wsRaw && (isNaN(wsRaw) || parseInt(wsRaw, 10) < 10)) {
+    if (fb) { fb.textContent = '✗ window must be ≥ 10 seconds'; fb.className = 'edit-feedback err'; }
+    return;
+  }
+  if (csRaw && (isNaN(csRaw) || parseInt(csRaw, 10) < 0)) {
+    if (fb) { fb.textContent = '✗ cooldown must be ≥ 0'; fb.className = 'edit-feedback err'; }
+    return;
+  }
+
+  // Warn if cooldown is shorter than window (non-blocking)
+  if (wsRaw && csRaw && parseInt(csRaw, 10) < parseInt(wsRaw, 10)) {
+    if (fb) {
+      fb.textContent = '⚠ cooldown shorter than window — alert storms possible';
+      fb.className = 'edit-feedback err';
+    }
+    // Allow save anyway — operator may have intentional reasons
+  }
+
+  const body = {
+    rule_name:    name,
+    threshold:    thRaw ? parseInt(thRaw, 10) : null,
+    window_sec:   wsRaw ? parseInt(wsRaw, 10) : null,
+    cooldown_sec: csRaw ? parseInt(csRaw, 10) : null,
+    enabled,
+  };
+
+  if (fb) { fb.textContent = 'saving…'; fb.className = 'edit-feedback'; }
+
+  try {
+    const r = await fetch('/rule-configs', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const msg = await r.text();
+      if (fb) { fb.textContent = '✗ ' + msg; fb.className = 'edit-feedback err'; }
+      return;
+    }
+
+    // Update local cache so the amber dot appears without a full re-render
+    ruleConfigs[name] = body;
+
+    // Show/update the customised dot and reset button in-place
+    const dot  = document.getElementById('dot-'  + rid);
+    const rbtn = document.getElementById('rbtn-' + rid);
+    if (dot)  dot.style.display  = '';
+    if (rbtn) rbtn.style.display = '';
+
+    // Show/hide the bulk reset button
+    const bar = document.getElementById('btn-reset-all');
+    if (bar) bar.style.display = '';
+
+    if (fb) { fb.textContent = '✓ saved — takes effect within 10 s'; fb.className = 'edit-feedback ok'; }
+    setTimeout(() => {
+      const f = document.getElementById('fb-' + rid);
+      if (f) { f.textContent = ''; f.className = 'edit-feedback'; }
+    }, 3000);
+
+  } catch {
+    if (fb) { fb.textContent = '✗ network error'; fb.className = 'edit-feedback err'; }
+  }
+}
+
+// ── Reset one rule to compiled defaults ────────────────────────────────────
+async function resetConfig(rid, name) {
+  if (!confirm(`Reset "${name}" to compiled defaults?\nYour threshold, window, and cooldown overrides will be removed.`)) return;
+
+  try {
+    const r = await fetch(`/rule-configs?rule=${encodeURIComponent(name)}`, {method:'DELETE'});
+    if (!r.ok) return;
+
+    delete ruleConfigs[name];
+
+    // Clear inputs in-place — panel stays open
+    const ids = ['th-','ws-','cs-'];
+    ids.forEach(prefix => {
+      const el = document.getElementById(prefix + rid);
+      if (el) el.value = '';
+    });
+    const en = document.getElementById('en-' + rid);
+    if (en) en.checked = true;
+
+    // Hide the amber dot and the reset button for this card
+    const dot  = document.getElementById('dot-'  + rid);
+    const rbtn = document.getElementById('rbtn-' + rid);
+    if (dot)  dot.style.display  = 'none';
+    if (rbtn) rbtn.style.display = 'none';
+
+    // Hide bulk reset button if no overrides remain
+    const bar = document.getElementById('btn-reset-all');
+    if (bar) bar.style.display = Object.keys(ruleConfigs).length > 0 ? '' : 'none';
+
+    const fb = document.getElementById('fb-' + rid);
+    if (fb) { fb.textContent = '✓ reset to compiled defaults'; fb.className = 'edit-feedback ok'; }
+    setTimeout(() => {
+      const f = document.getElementById('fb-' + rid);
+      if (f) { f.textContent = ''; f.className = 'edit-feedback'; }
+    }, 3000);
+
+  } catch {}
+}
+
+// ── Reset ALL rules to compiled defaults ───────────────────────────────────
+async function resetAllConfigs() {
+  const count = Object.keys(ruleConfigs).length;
+  if (count === 0) { alert('No active overrides to reset.'); return; }
+  if (!confirm(`Remove all ${count} active override(s)?\nEvery rule will revert to its compiled defaults.`)) return;
+
+  try {
+    const r = await fetch('/rule-configs', {method:'DELETE'});
+    if (!r.ok) return;
+    ruleConfigs = {};
+    const bar = document.getElementById('btn-reset-all');
+    if (bar) bar.style.display = 'none';
+    render(); // full re-render removes all amber dots and pre-filled inputs
+  } catch {}
+}
+
+// ── Dry-run simulator ──────────────────────────────────────────────────────
+
+async function simulateConfig(rid, name) {
+  const thRaw = document.getElementById('th-' + rid)?.value.trim();
+  const wsRaw = document.getElementById('ws-' + rid)?.value.trim();
+  const csRaw = document.getElementById('cs-' + rid)?.value.trim();
+  const lhEl  = document.getElementById('sim-lh-' + rid);
+  const lh    = lhEl ? parseInt(lhEl.value, 10) : 24;
+  const out   = document.getElementById('sim-' + rid);
+  if (!out) return;
+
+  out.style.display = '';
+  out.innerHTML = '<span style="color:var(--text-3)">running simulation…</span>';
+
+  const body = {
+    rule_name:    name,
+    threshold:    thRaw ? parseInt(thRaw, 10)   : null,
+    window_sec:   wsRaw ? parseInt(wsRaw, 10)   : null,
+    cooldown_sec: csRaw ? parseInt(csRaw, 10)   : null,
+    lookback_hours: lh,
+  };
+
+  // Must have at least one field to simulate
+  if (body.threshold === null && body.window_sec === null && body.cooldown_sec === null) {
+    out.innerHTML = '<span style="color:var(--text-3)">no changes to simulate — enter at least one value above</span>';
+    return;
+  }
+
+  try {
+    const r = await fetch('/rule-configs/simulate', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const msg = await r.text();
+      out.innerHTML = `<span style="color:var(--red)">✗ ${esc(msg)}</span>`;
+      return;
+    }
+
+    const d = await r.json();
+    const actual    = d.actual_alert_count;
+    const simulated = d.simulated_alert_count;
+    const delta     = d.delta;
+    const deltaColor = simulated > actual
+      ? 'var(--red)'
+      : simulated < actual
+        ? 'var(--green)'
+        : 'var(--text-3)';
+
+    let html = `<div style="display:flex;gap:16px;align-items:baseline;flex-wrap:wrap">
+      <span style="color:var(--text-3)">last ${esc(String(d.lookback_hours))}h —</span>
+      <span>actual: <strong style="color:var(--text)">${actual}</strong></span>
+      <span>simulated: <strong style="color:var(--text)">${simulated}</strong></span>
+      <span style="color:${deltaColor};font-weight:500">${esc(delta)}</span>
+    </div>`;
+
+    if (d.warnings && d.warnings.length > 0) {
+      html += d.warnings.map(w =>
+        `<div style="color:var(--amber);margin-top:4px">⚠ ${esc(w)}</div>`
+      ).join('');
+    }
+
+    out.innerHTML = html;
+  } catch {
+    out.innerHTML = '<span style="color:var(--red)">✗ network error</span>';
+  }
+}
+
+// ── Rule config history ────────────────────────────────────────────────────
+
+// toggleHistory lazily loads and shows/hides the change history for one rule.
+// On first open it fetches from the API; subsequent toggles reuse the DOM.
+async function toggleHistory(rid, name) {
+  const div = document.getElementById('hist-' + rid);
+  if (!div) return;
+
+  // If already loaded and visible, just hide it
+  if (div.style.display !== 'none') {
+    div.style.display = 'none';
+    return;
+  }
+
+  // Show the div and fetch if not already populated
+  div.style.display = '';
+  if (div.dataset.loaded === 'true') return; // already loaded this session
+
+  div.innerHTML = '<span style="font-family:var(--font-mono);color:var(--text-3)">loading…</span>';
+
+  try {
+    const r = await fetch(
+      `/rule-configs/history?rule=${encodeURIComponent(name)}&limit=10`
+    );
+    if (!r.ok) {
+      div.innerHTML = '<span style="font-family:var(--font-mono);color:var(--red)">failed to load history</span>';
+      return;
+    }
+    const history = await r.json();
+    div.innerHTML = renderHistory(history);
+    div.dataset.loaded = 'true';
+  } catch {
+    div.innerHTML = '<span style="font-family:var(--font-mono);color:var(--red)">network error</span>';
+  }
+}
+
+// renderHistory turns a history array into an inline timeline.
+function renderHistory(history) {
+  if (!history || !history.length) {
+    return '<span style="font-family:var(--font-mono);color:var(--text-3)">no changes recorded yet</span>';
+  }
+
+  const fieldLabel = {
+    threshold:   'threshold',
+    window_sec:  'window (s)',
+    cooldown_sec:'cooldown (s)',
+    enabled:     'enabled',
+    reset:       'reset to defaults',
+    'reset-all': 'bulk reset',
+  };
+
+  return '<div style="display:flex;flex-direction:column;gap:0">' +
+    history.map(h => {
+      const d  = new Date(h.changed_at);
+      const ts = isNaN(d) ? '—'
+        : d.toLocaleDateString('en-GB', {day:'2-digit', month:'short'})
+          + ' '
+          + d.toLocaleTimeString('en-GB', {hour12:false, hour:'2-digit', minute:'2-digit'});
+
+      const label = fieldLabel[h.field] || h.field;
+      const oldV  = h.old_value ?? 'default';
+      const newV  = h.new_value ?? 'default';
+
+      let change;
+      if (h.field === 'reset' || h.field === 'reset-all') {
+        change = `<span style="color:var(--amber)">reset to defaults</span>`;
+      } else {
+        change = `<span style="color:var(--text-3)">${esc(oldV)}</span>`
+               + `<span style="color:var(--text-3);margin:0 5px">→</span>`
+               + `<span style="color:var(--text)">${esc(newV)}</span>`;
+      }
+
+      return `<div style="display:flex;align-items:baseline;gap:8px;padding:4px 0;`
+           + `border-bottom:1px solid var(--border);font-family:var(--font-mono)">`
+           + `<span style="color:var(--text-3);flex-shrink:0;min-width:100px">${ts}</span>`
+           + `<span style="color:var(--text-2);flex-shrink:0;min-width:90px">${esc(label)}</span>`
+           + `<span style="flex:1">${change}</span>`
+           + `</div>`;
+    }).join('')
+  + '</div>';
+}
+
 async function updateCriticalBadge() {
   try {
     const r = await fetch('/alerts/severity-count?severity=CRITICAL');
@@ -305,6 +674,7 @@ async function updateCriticalBadge() {
 }
 
 async function loadAlerts() {
+ await loadRuleConfigs()
   try {
     const r = await fetch(`/alerts?limit=${LIMIT}`);
     alertData = r.ok ? (await r.json() ?? []) : [];
@@ -364,55 +734,89 @@ function clearFilters() {
   render();
 }
 
-function render() {
+function render(){
   const q    = el('f-text').value.toLowerCase();
   const fsrc = el('f-src').value;
   const fsev = el('f-sev').value;
   const fsort= el('f-sort').value;
 
-  let rules = RULES.filter(r => {
-    if (fsrc && r.src !== fsrc) return false;
-    if (fsev && r.sev !== fsev) return false;
-    if (q && !(r.name.toLowerCase().includes(q) || r.desc.toLowerCase().includes(q) || r.cat.toLowerCase().includes(q))) return false;
+  let rules = RULES.filter(r=>{
+    if(fsrc&&r.src!==fsrc)return false;
+    if(fsev&&r.sev!==fsev)return false;
+    if(q&&!(r.name.toLowerCase().includes(q)||r.desc.toLowerCase().includes(q)||r.cat.toLowerCase().includes(q)))return false;
     return true;
   });
 
-  // Sort
-  const maxFires = Math.max(1, ...Object.values(fireCounts));
-  if (fsort === 'fires') rules.sort((a,b) => (fireCounts[b.name]||0) - (fireCounts[a.name]||0));
-  else if (fsort === 'name') rules.sort((a,b) => a.name.localeCompare(b.name));
-  else if (fsort === 'sev')  rules.sort((a,b) => (SEV_ORD[b.sev]||0) - (SEV_ORD[a.sev]||0));
-  else if (fsort === 'last') rules.sort((a,b) => {
-    const la = lastFired[a.name]?.getTime() || 0;
-    const lb = lastFired[b.name]?.getTime() || 0;
-    return lb - la;
+  const maxFires=Math.max(1,...Object.values(fireCounts));
+  if(fsort==='fires') rules.sort((a,b)=>(fireCounts[b.name]||0)-(fireCounts[a.name]||0));
+  else if(fsort==='name') rules.sort((a,b)=>a.name.localeCompare(b.name));
+  else if(fsort==='sev')  rules.sort((a,b)=>(SEV_ORD[b.sev]||0)-(SEV_ORD[a.sev]||0));
+  else if(fsort==='last') rules.sort((a,b)=>{
+    const la=lastFired[a.name]?.getTime()||0;
+    const lb=lastFired[b.name]?.getTime()||0;
+    return lb-la;
   });
 
-  el('stats-txt').innerHTML = `Showing <strong>${rules.length}</strong> of <strong>${RULES.length}</strong> rules`;
+  el('stats-txt').innerHTML=`Showing <strong>${rules.length}</strong> of <strong>${RULES.length}</strong> rules`;
 
-  const grid = el('rules-grid');
-  if (!rules.length) { grid.innerHTML = '<div class="empty-state">no rules match the filter</div>'; return; }
+  // Show bulk-reset button only when overrides exist
+  const resetBar=document.getElementById('btn-reset-all');
+  if(resetBar) resetBar.style.display=Object.keys(ruleConfigs).length>0?'':'none';
 
-  const srcColors = {auth:'var(--blue)',ufw:'var(--green)',kern:'var(--amber)',audit:'var(--orange)',web:'var(--pink)'};
+  const grid=el('rules-grid');
+  if(!rules.length){grid.innerHTML='<div class="empty-state">no rules match the filter</div>';return;}
 
-  grid.innerHTML = rules.map(r => {
-    const fires = fireCounts[r.name] || 0;
-    const last  = lastFired[r.name];
-    const barW  = Math.round(fires / maxFires * 100);
-    const barColor = fires > 0 ? (srcColors[r.src] || 'var(--accent)') : 'var(--surface-3)';
-    const alertsURL = `/alerts.html?rule=${encodeURIComponent(r.name)}`;
+  const srcColors={auth:'var(--blue)',ufw:'var(--green)',kern:'var(--amber)',audit:'var(--orange)',web:'var(--pink)'};
 
-    return `<div class="rcard" style="cursor:${fires>0?'pointer':'default'}" onclick="${fires>0?`location.href='${alertsURL}'`:''}">
+  grid.innerHTML=rules.map(r=>{
+    const fires    = fireCounts[r.name]||0;
+    const last     = lastFired[r.name];
+    const barW     = Math.round(fires/maxFires*100);
+    const barColor = fires>0?(srcColors[r.src]||'var(--accent)'):'var(--surface-3)';
+    const alertsURL= `/alerts.html?rule=${encodeURIComponent(r.name)}`;
+    const rid      = ruleId(r.name);
+
+    // Merge DB override for this rule
+    const override    = ruleConfigs[r.name];
+    const hasOverride = !!override;
+    const isEnabled   = override ? override.enabled !== false : true;
+
+    // Pre-fill inputs from current override (empty = use compiled default)
+    const thVal = (override?.threshold    != null) ? String(override.threshold)    : '';
+    const wsVal = (override?.window_sec   != null) ? String(override.window_sec)   : '';
+    const csVal = (override?.cooldown_sec != null) ? String(override.cooldown_sec) : '';
+
+    // Card onclick navigates to alerts — edit panel stops propagation internally
+    const cardClick = fires>0 ? `location.href='${alertsURL}'` : '';
+
+    return `<div class="rcard${!isEnabled?' disabled':''}"
+                 style="cursor:${fires>0?'pointer':'default'}"
+                 onclick="${cardClick}">
+
+      <!-- Card header row -->
       <div class="rcard-top">
-        <div class="rcard-name">${esc(r.name)}</div>
-        <div class="rcard-sev">${pill(r.sev)}</div>
+        <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0">
+          <div class="customised-dot" id="dot-${rid}"
+               style="display:${hasOverride?'':'none'}" title="has active override"></div>
+          <div class="rcard-name">${esc(r.name)}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+          ${hasOverride?'<span class="customised-badge">customised</span>':''}
+          <div class="rcard-sev">${pill(r.sev)}</div>
+          <button class="edit-btn" id="ebtn-${rid}"
+                  onclick="event.stopPropagation();toggleEdit('${rid}')"
+                  title="Edit thresholds and cooldown">edit</button>
+        </div>
       </div>
+
       <div class="rcard-desc">${esc(r.desc)}</div>
+
       <div class="rcard-meta">
         <span class="tag tag-src">${esc(r.src)}</span>
         <span class="tag tag-prog">${esc(r.prog)}</span>
         <span class="tag tag-cat">${esc(r.cat)}</span>
       </div>
+
       <div class="rcard-stats">
         <div class="rstat">
           <div class="rstat-lbl">Fires</div>
@@ -423,10 +827,89 @@ function render() {
           <div class="rstat-time">${fmtLast(last)}</div>
         </div>
         <div class="fire-bar-wrap" style="display:flex;flex-direction:column;justify-content:flex-end">
-          <div class="fire-bar-bg"><div class="fire-bar-fill" style="width:${barW}%;background:${barColor}"></div></div>
-          ${fires>0?`<div style="text-align:right;margin-top:4px"><a href="${alertsURL}" onclick="event.stopPropagation()" style="font-size:9px;font-family:var(--font-mono);color:var(--accent);text-decoration:none">view alerts →</a></div>`:''}
+          <div class="fire-bar-bg">
+            <div class="fire-bar-fill" style="width:${barW}%;background:${barColor}"></div>
+          </div>
+          ${fires>0?`<div style="text-align:right;margin-top:4px">
+            <a href="${alertsURL}" onclick="event.stopPropagation()"
+               style="font-size:9px;font-family:var(--font-mono);color:var(--accent);text-decoration:none">
+              view alerts →</a></div>`:''}
         </div>
       </div>
+
+      <!-- ── Edit panel (hidden until toggled) ──────────────────────── -->
+      <div class="rcard-edit" id="edit-${rid}" onclick="event.stopPropagation()">
+
+        <div class="edit-row">
+          <span class="edit-lbl">Enabled</span>
+          <label class="r-toggle">
+            <input type="checkbox" id="en-${rid}" ${isEnabled?'checked':''}>
+            <div class="r-toggle-track"></div>
+            <div class="r-toggle-thumb"></div>
+          </label>
+          <span class="edit-hint">uncheck to silence this rule entirely</span>
+        </div>
+
+        <div class="edit-row">
+          <span class="edit-lbl">Threshold <span class="edit-hint">(count)</span></span>
+          <input class="r-input" id="th-${rid}" type="number" min="1" step="1"
+                 placeholder="compiled default" value="${thVal}">
+          <span class="edit-hint">events before alert fires</span>
+        </div>
+
+        <div class="edit-row">
+          <span class="edit-lbl">Window <span class="edit-hint">(seconds)</span></span>
+          <input class="r-input" id="ws-${rid}" type="number" min="10" step="10"
+                 placeholder="compiled default" value="${wsVal}">
+          <span class="edit-hint">sliding window duration</span>
+        </div>
+
+        <div class="edit-row">
+          <span class="edit-lbl">Cooldown <span class="edit-hint">(seconds)</span></span>
+          <input class="r-input" id="cs-${rid}" type="number" min="0" step="10"
+                 placeholder="compiled default" value="${csVal}">
+          <span class="edit-hint">gap between repeated alerts</span>
+        </div>
+
+        <div class="edit-actions">
+          <button class="edit-save"
+                  onclick="saveConfig('${rid}','${safeJs(r.name)}')">save changes</button>
+          <button class="edit-reset-btn" id="rbtn-${rid}"
+                  onclick="resetConfig('${rid}','${safeJs(r.name)}')"
+                  style="display:${hasOverride?'':'none'}">reset to defaults</button>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+            <select id="sim-lh-${rid}" onclick="event.stopPropagation()"
+                    style="background:var(--surface-2);border:1px solid var(--border);border-radius:4px;
+                           color:var(--text-3);font-family:var(--font-mono);font-size:9px;padding:2px 4px">
+              <option value="24">24h</option>
+              <option value="48">48h</option>
+              <option value="168">7d</option>
+            </select>
+            <button class="edit-reset-btn"
+                    onclick="simulateConfig('${rid}','${safeJs(r.name)}')">
+              ▶ test
+            </button>
+          </div>
+        </div>
+
+        <div id="sim-${rid}"
+             style="display:none;margin-top:6px;padding:8px 10px;
+                    background:var(--surface-3);border-radius:5px;
+                    font-size:10px;font-family:var(--font-mono);line-height:1.6">
+        </div>
+
+        <div class="edit-feedback" id="fb-${rid}"></div>
+
+        <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">
+          <button class="edit-reset-btn"
+                  onclick="toggleHistory('${rid}','${safeJs(r.name)}')">
+            ↓ change history
+          </button>
+          <div id="hist-${rid}" style="display:none;margin-top:8px;font-size:10px"></div>
+        </div>
+
+      </div>
+
     </div>`;
   }).join('');
 }

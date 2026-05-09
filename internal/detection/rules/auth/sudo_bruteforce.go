@@ -24,10 +24,15 @@ func NewSudoBruteForceRule() *SudoBruteForceRule {
 
 func (r *SudoBruteForceRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource: "auth",
-		Program:   "sudo",
-		EventTypes: []string{
-			"SUDO_FAIL",
+		LogSource:   "auth",
+		Program:     "sudo",
+		EventTypes:  []string{"SUDO_FAIL"},
+		DisplayName: "SUDO Brute Force",
+		Description: "Multiple failed sudo password attempts by the same user in a short window.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   5,
+			WindowSec:   120,
+			CooldownSec: 120,
 		},
 	}
 }
@@ -59,7 +64,7 @@ func getSudoBruteState(ctx *context.DetectionContext) *sudoBruteState {
 	return s
 }
 
-func (r *SudoBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *SudoBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 
 	s := getSudoBruteState(ctx)
 	user := event.Username
@@ -80,14 +85,14 @@ func (r *SudoBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context
 	}
 
 	// prune old entries (sliding window)
-	s.failedByUser[user] = helper.PruneOld(s.failedByUser[user], now, r.Window)
+	s.failedByUser[user] = helper.PruneOld(s.failedByUser[user], now, cfg.Window)
 
-	if len(s.failedByUser[user]) < r.Threshold {
+	if len(s.failedByUser[user]) < cfg.Threshold {
 		return nil
 	}
 
 	last := s.lastBruteForceAlert[user]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		s.runningCount[user] += event.EventCount

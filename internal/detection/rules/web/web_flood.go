@@ -40,16 +40,15 @@ func NewWebFloodRule() *WebFloodRule {
 
 func (r *WebFloodRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource: "web",
-		Program:   "httpd",
-		// Register for every EventType the web parser emits so ALL requests
-		// from an IP are counted, not just one category.
-		EventTypes: []string{
-			"HTTP_REQUEST",
-			"HTTP_PROBE",
-			"HTTP_404",
-			"HTTP_AUTH_FAIL",
-			"HTTP_METHOD",
+		LogSource:   "web",
+		Program:     "httpd",
+		EventTypes:  []string{"HTTP_REQUEST", "HTTP_PROBE", "HTTP_404", "HTTP_AUTH_FAIL", "HTTP_METHOD"},
+		DisplayName: "High Request Rate",
+		Description: "100+ requests/min from one IP (MEDIUM flood) or 500+ (HIGH — likely DDoS or heavy automated scan).",
+		Defaults: detection.RuleDefaults{
+			Threshold:   100,
+			WindowSec:   60,
+			CooldownSec: 300,
 		},
 	}
 }
@@ -81,7 +80,7 @@ func getWebFloodState(ctx *context.DetectionContext) *webFloodState {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *WebFloodRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *WebFloodRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getWebFloodState(ctx)
 	ip := event.SourceIP
 	now := event.Timestamp
@@ -91,15 +90,15 @@ func (r *WebFloodRule) Evaluate(event *model.NormalizedEvent, ctx *context.Detec
 	}
 
 	s.reqsByIP[ip] = append(s.reqsByIP[ip], now)
-	s.reqsByIP[ip] = helper.PruneOld(s.reqsByIP[ip], now, r.Window)
+	s.reqsByIP[ip] = helper.PruneOld(s.reqsByIP[ip], now, cfg.Window)
 	count := len(s.reqsByIP[ip])
 
-	if count < r.Threshold {
+	if count < cfg.Threshold {
 		return nil
 	}
 
 	last := s.lastAlertIP[ip]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		if id := s.lastAlertID[ip]; id != "" {
@@ -131,7 +130,7 @@ func (r *WebFloodRule) Evaluate(event *model.NormalizedEvent, ctx *context.Detec
 		label,
 		severity,
 		"dos",
-		fmt.Sprintf("IP %s sent %d HTTP requests in %v — possible flood or automated scan", ip, count, r.Window),
+		fmt.Sprintf("IP %s sent %d HTTP requests in %v — possible flood or automated scan", ip, count, cfg.Window),
 		event,
 		count,
 	)

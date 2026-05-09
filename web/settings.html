@@ -200,6 +200,7 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
       <button class="settings-nav-item" onclick="scrollTo('s-dashboard')">Dashboard</button>
       <button class="settings-nav-item" onclick="scrollTo('s-alerts')">Alerts</button>
       <button class="settings-nav-item" onclick="scrollTo('s-livelogs')">Live Logs</button>
+      <button class="settings-nav-item" onclick="scrollTo('s-sensitivity')">Sensitivity</button>
       <button class="settings-nav-item" onclick="scrollTo('s-notifications')">Notifications</button>
       <button class="settings-nav-item" onclick="scrollTo('s-retention')">Retention</button>
       <button class="settings-nav-item" onclick="scrollTo('s-danger')">Danger Zone</button>
@@ -490,6 +491,119 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
         </div>
       </div>
 
+      <!-- ── Detection Sensitivity ────────────────────────────────────────── -->
+    <div class="section" id="s-sensitivity">
+      <div class="section-head">
+        <div class="section-icon" style="background:var(--amber-dim)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" stroke-linecap="round">
+            <line x1="4"  y1="21" x2="4"  y2="14"/><line x1="4"  y1="10" x2="4"  y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8"  x2="12" y2="3"/>
+            <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
+            <line x1="1"  y1="14" x2="7"  y2="14"/><line x1="9"  y1="8"  x2="15" y2="8"/>
+            <line x1="17" y1="16" x2="23" y2="16"/>
+          </svg>
+        </div>
+        <div>
+          <div class="section-title">Detection Sensitivity</div>
+          <div class="section-desc">
+            Global tuning applied between compiled defaults and per-rule overrides.
+            Per-rule customisations (Rules Manager) always take priority.
+          </div>
+        </div>
+        <span class="local-badge">live</span>
+      </div>
+
+      <!-- Threshold multiplier -->
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Threshold multiplier</div>
+          <div class="setting-hint">
+            Scales every rule's compiled attempt-count threshold by this factor.
+            0.5× fires alerts sooner; 2× requires more attempts before alerting.
+            Has no effect on rules that have a per-rule threshold override.
+          </div>
+        </div>
+        <div class="setting-control">
+          <select class="s-select" id="cfg-global-threshold-mul"
+                  onchange="save('global-threshold-mul', this.value)">
+            <option value="0.5">0.5× — more sensitive (half the attempts)</option>
+            <option value="1">1× — default (no change)</option>
+            <option value="2">2× — less sensitive (double the attempts)</option>
+            <option value="4">4× — much less sensitive (4× the attempts)</option>
+          </select>
+          <div class="save-dot" id="dot-global-threshold-mul"></div>
+        </div>
+      </div>
+
+      <!-- Global window -->
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Global window override</div>
+          <div class="setting-hint">
+            Replaces the sliding window duration for every rule that does not have
+            a per-rule window override. Shorter windows reduce alert lag but
+            increase noise; longer windows suppress transient spikes.
+          </div>
+        </div>
+        <div class="setting-control">
+          <select class="s-select" id="cfg-global-window-sec"
+                  onchange="save('global-window-sec', this.value)">
+            <option value="">per-rule compiled default</option>
+            <option value="30">30 seconds</option>
+            <option value="60">1 minute</option>
+            <option value="120">2 minutes</option>
+            <option value="300">5 minutes</option>
+            <option value="600">10 minutes</option>
+            <option value="1800">30 minutes</option>
+            <option value="3600">1 hour</option>
+          </select>
+          <div class="save-dot" id="dot-global-window-sec"></div>
+        </div>
+      </div>
+
+      <!-- Global cooldown -->
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Global cooldown override</div>
+          <div class="setting-hint">
+            Replaces the cooldown (minimum gap between repeated alerts) for every
+            rule without a per-rule cooldown override. Increase to suppress
+            alert storms during heavy attacks; decrease for faster re-alerting.
+          </div>
+        </div>
+        <div class="setting-control">
+          <select class="s-select" id="cfg-global-cooldown-sec"
+                  onchange="save('global-cooldown-sec', this.value)">
+            <option value="">per-rule compiled default</option>
+            <option value="0">0 seconds (no cooldown)</option>
+            <option value="30">30 seconds</option>
+            <option value="60">1 minute</option>
+            <option value="120">2 minutes</option>
+            <option value="300">5 minutes</option>
+            <option value="600">10 minutes</option>
+            <option value="1800">30 minutes</option>
+          </select>
+          <div class="save-dot" id="dot-global-cooldown-sec"></div>
+        </div>
+      </div>
+
+      <!-- Priority explanation footer -->
+      <div class="setting-row" style="background:var(--surface-2);border-top:1px solid var(--border)">
+        <div class="setting-info" style="flex:1">
+          <div style="font-size:11px;color:var(--text-3);line-height:1.6">
+            Resolution order:
+            <strong style="color:var(--text-2)">compiled default</strong>
+            → <strong style="color:var(--text-2)">global sensitivity</strong>
+            → <strong style="color:var(--text-2)">per-rule override</strong>.
+            Changes take effect immediately (cache is invalidated on save).
+            Rules whose <code style="font-family:var(--font-mono);font-size:10px;background:var(--surface-3);padding:1px 5px;border-radius:3px;color:var(--text-2)">DisplayName</code>
+            has not been declared yet (pre-Phase 2.5 rules) are unaffected by
+            the threshold multiplier and window/cooldown overrides.
+          </div>
+        </div>
+      </div>
+    </div>
+
       <!-- ── Notifications ─────────────────────────────────────────── -->
       <div class="section" id="s-notifications">
         <div class="section-head">
@@ -711,6 +825,9 @@ const DEFAULTS = {
   'notify-dedup':      '300',
   'retention':         '30',
   'max-rows':          '0',
+  'global-threshold-mul': '1',
+  'global-window-sec':    '',
+  'global-cooldown-sec':  '',
 };
 
 const KEY = k => 'ids-' + k;
@@ -758,6 +875,7 @@ async function loadSettings() {
 // to POST /settings; UI-only keys go to localStorage as before.
 const BACKEND_KEYS = new Set([
   'webhook-url','notify-sev','notify-dedup','retention','max-rows',
+  'global-threshold-mul','global-window-sec','global-cooldown-sec'
 ]);
 
 async function testWebhook() {
@@ -846,7 +964,7 @@ const observer = new IntersectionObserver(entries => {
   });
 }, { threshold: 0.35, rootMargin: '-60px 0px -60% 0px' });
 
-['s-system','s-dashboard','s-alerts','s-livelogs','s-notifications','s-retention','s-danger']
+['s-system','s-dashboard','s-alerts','s-livelogs', 's-sensitivity','s-notifications','s-retention','s-danger']
   .forEach(id => { const e2 = el(id); if (e2) observer.observe(e2); });
 
 // ── System info from APIs ──────────────────────────────────────────

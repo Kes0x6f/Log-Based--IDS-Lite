@@ -23,11 +23,15 @@ func NewSSHEnumerationRule() *SSHEnumerationRule {
 
 func (r *SSHEnumerationRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource: "auth",
-		Program:   "sshd",
-		EventTypes: []string{
-			"SSH_FAILED",
-			"SSH_INVALID_USER",
+		LogSource:   "auth",
+		Program:     "sshd",
+		EventTypes:  []string{"SSH_FAILED", "SSH_INVALID_USER"},
+		DisplayName: "SSH Username Enumeration",
+		Description: "Single IP attempting many distinct usernames — automated user discovery.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   5,
+			WindowSec:   180,
+			CooldownSec: 180,
 		},
 	}
 }
@@ -59,7 +63,7 @@ func getEnumerationState(ctx *context.DetectionContext) *sshEnumerationState {
 	return s
 }
 
-func (r *SSHEnumerationRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *SSHEnumerationRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 
 	s := getEnumerationState(ctx)
 	ip := event.SourceIP
@@ -75,14 +79,14 @@ func (r *SSHEnumerationRule) Evaluate(event *model.NormalizedEvent, ctx *context
 	}
 
 	s.failedUsersByIP[ip][user] = now
-	s.PruneUserEnumeration(ip, now, r.Window)
+	s.PruneUserEnumeration(ip, now, cfg.Window)
 
-	if len(s.failedUsersByIP[ip]) < r.Threshold {
+	if len(s.failedUsersByIP[ip]) < cfg.Threshold {
 		return nil
 	}
 
 	last := s.lastEnumerationAlert[ip]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		s.runningCount[ip] += event.EventCount

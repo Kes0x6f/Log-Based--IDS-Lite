@@ -114,6 +114,19 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
 .raw-line{font-family:var(--font-mono);font-size:11px;color:var(--text-2);line-height:1.7;padding:12px 16px;word-break:break-all;white-space:pre-wrap;background:var(--surface-2)}
 /* command field — may be long, allow wrap */
 .field-val.wrap{white-space:pre-wrap;word-break:break-all;line-height:1.6}
+
+/* Threat-detail panel */
+.td-panel{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:hidden}
+.td-panel-head{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border)}
+.td-panel-title{font-size:10px;font-weight:500;color:var(--text-3);letter-spacing:.1em;text-transform:uppercase}
+.td-body{display:flex;flex-wrap:wrap;gap:6px;padding:12px 16px}
+.td-chip{display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:5px;overflow:hidden;font-size:11px;font-family:var(--font-mono)}
+.td-key{padding:3px 8px;background:var(--surface-2);color:var(--text-3);font-size:10px;letter-spacing:.04em}
+.td-val{padding:3px 8px;color:var(--text);background:var(--surface)}
+/* Attack duration highlight */
+.field-val.duration{color:var(--amber)}
+/* Fail count highlight */
+.field-val.failcount{color:var(--red)}
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:2px}
@@ -218,7 +231,44 @@ body{font-family:var(--font-ui);background:var(--bg);color:var(--text);font-size
           <div class="field-lbl" id="h-cmd-lbl">Command</div>
           <div class="field-val mono wrap" id="h-command">—</div>
         </div>
+        <div class="field" id="field-failcount" style="display:none">
+          <div class="field-lbl" id="h-failcount-lbl">Failures</div>
+          <div class="field-val mono failcount" id="h-failcount">—</div>
+        </div>
+        <div class="field" id="field-ipcount" style="display:none">
+          <div class="field-lbl">Attacker IPs</div>
+          <div class="field-val mono" id="h-ipcount">—</div>
+        </div>
+        <div class="field" id="field-duration" style="display:none">
+          <div class="field-lbl">Attack Duration</div>
+          <div class="field-val mono duration" id="h-duration">—</div>
+        </div>
+        <div class="field" id="field-targetuser" style="display:none">
+          <div class="field-lbl">Target Account</div>
+          <div class="field-val mono" id="h-targetuser">—</div>
+        </div>
+        <div class="field" id="field-authmethod" style="display:none">
+          <div class="field-lbl">Auth Method</div>
+          <div class="field-val mono" id="h-authmethod">—</div>
+        </div>
+        <div class="field" id="field-portlist" style="display:none">
+          <div class="field-lbl">Ports Scanned</div>
+          <div class="field-val mono wrap" id="h-portlist">—</div>
+        </div>
+        <div class="field" id="field-callerexe" style="display:none">
+          <div class="field-lbl">Calling Binary</div>
+          <div class="field-val mono" id="h-callerexe">—</div>
+        </div>
       </div>
+    </div>
+
+
+    <!-- Threat detail — parsed key:value pairs from enrichment -->
+    <div class="td-panel" id="panel-threat-detail" style="display:none">
+      <div class="td-panel-head">
+        <span class="td-panel-title">Threat Context</span>
+      </div>
+      <div class="td-body" id="threat-detail-body"></div>
     </div>
 
     <!-- Raw log evidence -->
@@ -331,6 +381,63 @@ async function load(){
   el('h-user').textContent=alert.Username||'—';
   el('h-host').textContent=alert.Host||'—';
   el('h-count').textContent=(alert.EventCount||1).toLocaleString();
+
+
+  function fmtDuration(secs){
+    if(!secs||secs<=0)return'—';
+    if(secs<60)return secs+'s';
+    const m=Math.floor(secs/60),s=secs%60;
+    if(m<60)return s>0?m+'m '+s+'s':m+'m';
+    const h=Math.floor(m/60),rm=m%60;
+    return rm>0?h+'h '+rm+'m':h+'h';
+  }
+
+  function renderThreatDetail(detail){
+    if(!detail||detail==='')return;
+    const pairs=detail.trim().split(' ').map(p=>{
+      const idx=p.indexOf(':');
+      return idx>-1?{k:p.slice(0,idx),v:p.slice(idx+1)}:{k:p,v:''};
+    });
+    el('threat-detail-body').innerHTML=pairs.map(p=>
+      `<div class="td-chip"><span class="td-key">${esc(p.k)}</span><span class="td-val">${esc(p.v)}</span></div>`
+    ).join('');
+    el('panel-threat-detail').style.display='';
+  }
+
+  // ── Enrichment fields ────────────────────────────────────────────────────
+  const failLabels={auth:'Failures',ufw:'Blocks',web:'Requests',kern:'Errors',audit:'Events'};
+  if(alert.FailCount&&alert.FailCount>0){
+    el('h-failcount-lbl').textContent=failLabels[alert.LogSource]||'Failures';
+    el('h-failcount').textContent=alert.FailCount.toLocaleString();
+    el('field-failcount').style.display='';
+  }
+  if(alert.IPCount&&alert.IPCount>0){
+    el('h-ipcount').textContent=alert.IPCount.toLocaleString();
+    el('field-ipcount').style.display='';
+  }
+  if(alert.AttackDuration&&alert.AttackDuration>0){
+    el('h-duration').textContent=fmtDuration(alert.AttackDuration);
+    el('field-duration').style.display='';
+  }
+  if(alert.TargetUser&&alert.TargetUser!==''){
+    el('h-targetuser').textContent=alert.TargetUser;
+    el('field-targetuser').style.display='';
+  }
+  if(alert.AuthMethod&&alert.AuthMethod!==''){
+    el('h-authmethod').textContent=alert.AuthMethod;
+    el('field-authmethod').style.display='';
+  }
+  if(alert.PortList&&alert.PortList!==''){
+    el('h-portlist').textContent=alert.PortList;
+    el('field-portlist').style.display='';
+  }
+  if(alert.CallerExe&&alert.CallerExe!==''){
+    el('h-callerexe').textContent=alert.CallerExe;
+    el('field-callerexe').style.display='';
+  }
+  if(alert.ThreatDetail&&alert.ThreatDetail!==''){
+    renderThreatDetail(alert.ThreatDetail);
+  }
 
   // ── LogSource badge ────────────────────────────────────────────────────
   const logsrcEl = el('h-logsrc');

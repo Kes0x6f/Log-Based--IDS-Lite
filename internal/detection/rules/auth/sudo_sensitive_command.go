@@ -32,11 +32,12 @@ var sensitiveCommands = []CommandRisk{
 
 func (r *SudoSensitiveCommandRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource: "auth",
-		Program:   "sudo",
-		EventTypes: []string{
-			"SUDO_EXEC",
-		},
+		LogSource:   "auth",
+		Program:     "sudo",
+		EventTypes:  []string{"SUDO_EXEC"},
+		DisplayName: "SUDO Sensitive Command Execution",
+		Description: "Risk-scored detection for dangerous sudo commands — score adjusted by prior failures and frequency.",
+		Defaults:    detection.RuleDefaults{},
 	}
 }
 func calculateRisk(cmd string, user string, shared *context.SharedSudoContext) int {
@@ -87,7 +88,7 @@ func mapSeverity(score int) model.Severity {
 	}
 }
 
-func (r *SudoSensitiveCommandRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *SudoSensitiveCommandRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 
 	cmd := event.Command
 	user := event.Username

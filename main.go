@@ -48,6 +48,7 @@ func main() {
 	}
 	alertRepo := &database.AlertRepository{DB: db}
 	settingsRepo := &database.SettingsRepository{DB: db}
+	ruleConfigRepo := &database.RuleConfigRepository{DB: db}
 	alertManager := &alert.Manager{
 		AlertRepo:    alertRepo,
 		SettingsRepo: settingsRepo,
@@ -167,7 +168,10 @@ func main() {
 		webrule.NewWebAuthBruteRule(),
 		webrule.NewWebMethodRule(),
 		webrule.NewWebFloodRule(),
-	})
+	}, ruleConfigRepo, settingsRepo)
+
+	apiHandler.RuleConfigRepo = ruleConfigRepo
+	apiHandler.Engine = engine
 
 	for _, c := range filecollectors {
 		go c.Start(rawLogChan)

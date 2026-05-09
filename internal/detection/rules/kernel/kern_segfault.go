@@ -40,9 +40,16 @@ func NewKernSegfaultRule() *KernSegfaultRule {
 
 func (r *KernSegfaultRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "kern",
-		Program:    "kernel",
-		EventTypes: []string{"SEGFAULT"},
+		LogSource:   "kern",
+		Program:     "kernel",
+		EventTypes:  []string{"SEGFAULT"},
+		DisplayName: "Sensitive Binary Segfault",
+		Description: "sshd, sudo, su, passwd, or systemd crashes — may indicate an exploitation attempt.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   0,
+			WindowSec:   0,
+			CooldownSec: 600,
+		},
 	}
 }
 
@@ -73,7 +80,7 @@ func getKernSegfaultState(ctx *context.DetectionContext) *kernSegfaultState {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *KernSegfaultRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *KernSegfaultRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	bin := event.Command // set by KernParser
 	now := event.Timestamp
 
@@ -86,7 +93,7 @@ func (r *KernSegfaultRule) Evaluate(event *model.NormalizedEvent, ctx *context.D
 	count := s.countByBin[bin]
 
 	last := s.lastAlertByBin[bin]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		if id := s.lastAlertID[bin]; id != "" {

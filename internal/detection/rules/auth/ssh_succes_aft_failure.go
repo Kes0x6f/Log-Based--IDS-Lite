@@ -24,11 +24,15 @@ func NewSSHSuccessAfterFailRule() *SSHSuccessAfterFailRule {
 
 func (r *SSHSuccessAfterFailRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource: "auth",
-		Program:   "sshd",
-		EventTypes: []string{
-			"SSH_FAILED",
-			"SSH_SUCCESS",
+		LogSource:   "auth",
+		Program:     "sshd",
+		EventTypes:  []string{"SSH_FAILED", "SSH_SUCCESS"},
+		DisplayName: "SSH Suspicious Login",
+		Description: "Successful SSH login preceded by multiple failures — likely brute-force success.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   3,
+			WindowSec:   300,
+			CooldownSec: 300,
 		},
 	}
 }
@@ -60,7 +64,7 @@ func getSSHSuccessAfterFailState(ctx *context.DetectionContext) *sshSuccessAfter
 	return s
 }
 
-func (r *SSHSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *SSHSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 
 	s := getSSHSuccessAfterFailState(ctx)
 	ip := event.SourceIP
@@ -73,7 +77,7 @@ func (r *SSHSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *co
 		s.recentFailures[ip] = append(s.recentFailures[ip], now)
 
 		// prune old entries
-		s.recentFailures[ip] = helper.PruneOld(s.recentFailures[ip], now, r.Window)
+		s.recentFailures[ip] = helper.PruneOld(s.recentFailures[ip], now, cfg.Window)
 
 		return nil
 
@@ -81,11 +85,11 @@ func (r *SSHSuccessAfterFailRule) Evaluate(event *model.NormalizedEvent, ctx *co
 
 		failures := s.recentFailures[ip]
 
-		if len(failures) >= r.Threshold {
+		if len(failures) >= cfg.Threshold {
 
 			last := s.lastSuspiciousLoginAlert[ip]
 
-			if now.Sub(last) > r.Window {
+			if now.Sub(last) > cfg.Cooldown {
 
 				alert := model.NewAlert(
 					"SSH Suspicious Login",

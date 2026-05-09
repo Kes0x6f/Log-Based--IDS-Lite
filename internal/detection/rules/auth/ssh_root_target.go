@@ -22,11 +22,15 @@ func NewSSHRootTargetRule() *SSHRootTargetRule {
 
 func (r *SSHRootTargetRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource: "auth",
-		Program:   "sshd",
-		EventTypes: []string{
-			"SSH_FAILED",
-			"SSH_INVALID_USER",
+		LogSource:   "auth",
+		Program:     "sshd",
+		EventTypes:  []string{"SSH_FAILED", "SSH_INVALID_USER"},
+		DisplayName: "SSH Root Targeting",
+		Description: "Repeated failed SSH attempts specifically targeting the root account.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   0,
+			WindowSec:   120,
+			CooldownSec: 120,
 		},
 	}
 }
@@ -56,7 +60,7 @@ func getSSHRootTargetState(ctx *context.DetectionContext) *sshRootTargetState {
 	return s
 }
 
-func (r *SSHRootTargetRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *SSHRootTargetRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 
 	s := getSSHRootTargetState(ctx)
 	ip := event.SourceIP
@@ -75,10 +79,10 @@ func (r *SSHRootTargetRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 		s.rootFailures[ip] = append(s.rootFailures[ip], now)
 	}
 
-	s.rootFailures[ip] = helper.PruneOld(s.rootFailures[ip], now, r.Window)
+	s.rootFailures[ip] = helper.PruneOld(s.rootFailures[ip], now, cfg.Window)
 
 	last := s.lastRootTargetAlert[ip]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		originalID := s.lastAlertID[ip]

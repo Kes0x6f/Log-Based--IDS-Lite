@@ -63,9 +63,16 @@ func NewAuditCapsetRule() *AuditCapsetRule {
 
 func (r *AuditCapsetRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "audit",
-		Program:    "auditd",
-		EventTypes: []string{"CAPSET"},
+		LogSource:   "audit",
+		Program:     "auditd",
+		EventTypes:  []string{"CAPSET"},
+		DisplayName: "Capability Change Detected",
+		Description: "Process dynamically modifies its Linux capability set — privilege escalation without a shell.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   0,
+			WindowSec:   0,
+			CooldownSec: 1800,
+		},
 	}
 }
 
@@ -92,7 +99,7 @@ func getAuditCapsetState(ctx *context.DetectionContext) *auditCapsetState {
 	return s
 }
 
-func (r *AuditCapsetRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *AuditCapsetRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	exe := event.Command
 	user := event.Username
 	now := event.Timestamp
@@ -132,7 +139,7 @@ func (r *AuditCapsetRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 	count := s.countByKey[key]
 
 	last := s.lastAlertByKey[key]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 	if inCooldown {
 		if id := s.lastAlertID[key]; id != "" {
 			return []*model.Alert{{

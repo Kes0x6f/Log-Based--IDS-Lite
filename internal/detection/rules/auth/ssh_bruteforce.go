@@ -24,10 +24,15 @@ func NewSSHBruteForceRule() *SSHBruteForceRule {
 
 func (r *SSHBruteForceRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource: "auth",
-		Program:   "sshd",
-		EventTypes: []string{
-			"SSH_FAILED",
+		LogSource:   "auth",
+		Program:     "sshd",
+		EventTypes:  []string{"SSH_FAILED"},
+		DisplayName: "SSH Brute Force",
+		Description: "Multiple failed SSH login attempts from a single IP within a sliding window.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   5,
+			WindowSec:   120,
+			CooldownSec: 120,
 		},
 	}
 }
@@ -59,7 +64,7 @@ func getSSHBruteState(ctx *context.DetectionContext) *sshBruteState {
 	return s
 }
 
-func (r *SSHBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *SSHBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 
 	s := getSSHBruteState(ctx)
 	ip := event.SourceIP
@@ -69,14 +74,14 @@ func (r *SSHBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context.
 		s.failedByIP[ip] = append(s.failedByIP[ip], now)
 	}
 
-	s.failedByIP[ip] = helper.PruneOld(s.failedByIP[ip], now, r.Window)
+	s.failedByIP[ip] = helper.PruneOld(s.failedByIP[ip], now, cfg.Window)
 
-	if len(s.failedByIP[ip]) < r.Threshold {
+	if len(s.failedByIP[ip]) < cfg.Threshold {
 		return nil
 	}
 
 	last := s.lastAlertByIP[ip]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		s.runningCount[ip] += event.EventCount

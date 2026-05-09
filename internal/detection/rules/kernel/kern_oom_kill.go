@@ -47,9 +47,16 @@ func NewKernOOMKillRule() *KernOOMKillRule {
 
 func (r *KernOOMKillRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "kern",
-		Program:    "kernel",
-		EventTypes: []string{"OOM_KILL"},
+		LogSource:   "kern",
+		Program:     "kernel",
+		EventTypes:  []string{"OOM_KILL"},
+		DisplayName: "OOM Kill Detected",
+		Description: "OOM killer terminates a process. HIGH for critical services, MEDIUM otherwise.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   3,
+			WindowSec:   300,
+			CooldownSec: 600,
+		},
 	}
 }
 
@@ -80,7 +87,7 @@ func getKernOOMState(ctx *context.DetectionContext) *kernOOMState {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *KernOOMKillRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *KernOOMKillRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getKernOOMState(ctx)
 	proc := event.Command // set by KernParser
 	now := event.Timestamp
@@ -90,14 +97,14 @@ func (r *KernOOMKillRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 	}
 
 	s.killsByProc[proc] = append(s.killsByProc[proc], now)
-	s.killsByProc[proc] = helper.PruneOld(s.killsByProc[proc], now, r.Window)
+	s.killsByProc[proc] = helper.PruneOld(s.killsByProc[proc], now, cfg.Window)
 	count := len(s.killsByProc[proc])
 
 	isCritical := criticalProcesses[proc]
 
 	// Only alert if threshold met, or process is critical (threshold = 1)
 	detail := event.ThreatDetail
-	threshold := r.Threshold
+	threshold := cfg.Threshold
 	if isCritical {
 		threshold = 1
 		detail += " critical:yes"
@@ -111,7 +118,7 @@ func (r *KernOOMKillRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 	}
 
 	last := s.lastAlertByProc[proc]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		if id := s.lastAlertID[proc]; id != "" {
@@ -133,7 +140,7 @@ func (r *KernOOMKillRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 		"OOM Kill Detected",
 		severity,
 		"stability",
-		fmt.Sprintf("OOM killer terminated process %s (%d times in %v)", proc, count, r.Window),
+		fmt.Sprintf("OOM killer terminated process %s (%d times in %v)", proc, count, cfg.Window),
 		event,
 		count,
 	)

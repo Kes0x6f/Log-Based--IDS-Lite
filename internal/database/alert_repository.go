@@ -11,6 +11,11 @@ type AlertRepository struct {
 	DB *sql.DB
 }
 
+type RuleStat struct {
+	Count     int        `json:"count"`
+	LastFired *time.Time `json:"last_fired"`
+}
+
 func (r *AlertRepository) Insert(alert *model.Alert) error {
 	query := `
 	INSERT INTO alerts (
@@ -61,7 +66,7 @@ func (r *AlertRepository) GetByID(id string) (*model.Alert, error) {
 	       message,
 	       source_ip, username, host,
 	       port, command, log_source, raw_line,
-	       event_count
+	       event_count,
 		   fail_count, ip_count, attack_duration,
 	       target_user, auth_method, port_list, caller_exe, threat_detail
 	FROM alerts
@@ -90,7 +95,7 @@ func (r *AlertRepository) GetRecent(limit int) ([]model.Alert, error) {
 	       message,
 	       source_ip, username, host,
 	       port, command, log_source, raw_line,
-	       event_count
+	       event_count,
 		   fail_count, ip_count, attack_duration,
 	       target_user, auth_method, port_list, caller_exe, threat_detail
 	FROM alerts
@@ -114,7 +119,7 @@ func (r *AlertRepository) GetAlerts(ip, severity, category, rule, since string, 
 	       message,
 	       source_ip, username, host,
 	       port, command, log_source, raw_line,
-	       event_count
+	       event_count,
 		   fail_count, ip_count, attack_duration,
 	       target_user, auth_method, port_list, caller_exe, threat_detail
 	FROM alerts
@@ -252,4 +257,29 @@ func scanAlerts(rows *sql.Rows) ([]model.Alert, error) {
 		alerts = append(alerts, a)
 	}
 	return alerts, rows.Err()
+}
+
+func (r *AlertRepository) RuleStats() (map[string]RuleStat, error) {
+	rows, err := r.DB.Query(`
+		SELECT rule_name, COUNT(*) AS cnt, MAX(timestamp) AS last_ts
+		FROM   alerts
+		GROUP  BY rule_name
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[string]RuleStat)
+	for rows.Next() {
+		var name string
+		var cnt int
+		var ts time.Time
+		if err := rows.Scan(&name, &cnt, &ts); err != nil {
+			return nil, err
+		}
+		lf := ts
+		out[name] = RuleStat{Count: cnt, LastFired: &lf}
+	}
+	return out, rows.Err()
 }

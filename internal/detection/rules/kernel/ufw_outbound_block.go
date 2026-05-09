@@ -56,9 +56,16 @@ func NewUFWOutboundBlockRule() *UFWOutboundBlockRule {
 
 func (r *UFWOutboundBlockRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "ufw",
-		Program:    "kernel",
-		EventTypes: []string{"FW_BLOCK_OUT"},
+		LogSource:   "ufw",
+		Program:     "kernel",
+		EventTypes:  []string{"FW_BLOCK_OUT"},
+		DisplayName: "UFW Suspicious Outbound Block",
+		Description: "Outbound connection attempt to known C2/backdoor ports blocked by the firewall.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   0,
+			WindowSec:   0,
+			CooldownSec: 900,
+		},
 	}
 }
 
@@ -88,7 +95,7 @@ func getUFWOutboundState(ctx *context.DetectionContext) *ufwOutboundState {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *UFWOutboundBlockRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *UFWOutboundBlockRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getUFWOutboundState(ctx)
 	src := event.SourceIP // local machine's IP for outbound
 	port := event.Port    // destination port on the remote side
@@ -105,7 +112,7 @@ func (r *UFWOutboundBlockRule) Evaluate(event *model.NormalizedEvent, ctx *conte
 
 	key := src + ":" + port
 	last := s.lastAlertByKey[key]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		if id := s.lastAlertID[key]; id != "" {

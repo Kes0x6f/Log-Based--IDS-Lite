@@ -247,16 +247,18 @@ function render(){
   const byIP={};
   brute.forEach(a=>{
     const ip=a.SourceIP||'unknown';
-    if(!byIP[ip])byIP[ip]={ip,alerts:[],rules:{},maxSev:0,attempts:0,first:null,last:null};
+    if(!byIP[ip])byIP[ip]={ip,alerts:[],rules:{},maxSev:0,attempts:0,failCount:0,ipCount:0,first:null,last:null};
     const g=byIP[ip];
     g.alerts.push(a);
     g.rules[a.RuleName]=(g.rules[a.RuleName]||0)+1;
     g.attempts+=(a.EventCount||1);
+    g.failCount=(g.failCount||0)+(a.FailCount||0);
     const t=new Date(a.Timestamp);
     if(!g.first||t<g.first)g.first=t;
     if(!g.last||t>g.last)g.last=t;
     const sevOrd={CRITICAL:4,HIGH:3,MEDIUM:2,LOW:1};
     if((sevOrd[a.Severity]||0)>g.maxSev)g.maxSev=sevOrd[a.Severity]||0;
+    if(a.IPCount>g.ipCount)g.ipCount=a.IPCount;
   });
 
   const campaigns=Object.values(byIP).sort((a,b)=>b.last-a.last);
@@ -303,6 +305,8 @@ function render(){
           ${pill(sev)}
         </div>
         <span class="camp-stat"><strong>${c.attempts.toLocaleString()}</strong> attempts</span>
+        ${c.failCount>0?`<span class="camp-stat" style="color:var(--red)"><strong>${c.failCount.toLocaleString()}</strong> failures</span>`:''}
+        ${c.ipCount>1?`<span class="camp-stat" style="color:var(--orange)"><strong>${c.ipCount}</strong> IPs</span>`:''}
         <span class="camp-stat"><strong>${Object.keys(c.rules).length}</strong> rules</span>
         <span class="camp-stat">${fmtAge(c.last)}</span>
         <span class="camp-chevron" id="chev-${i}">›</span>
@@ -313,6 +317,8 @@ function render(){
           <div class="cm-field"><div class="cm-lbl">Last seen</div><div class="cm-val">${fmtShort(c.last)}</div></div>
           <div class="cm-field"><div class="cm-lbl">Total alerts</div><div class="cm-val">${c.alerts.length}</div></div>
           <div class="cm-field"><div class="cm-lbl">Total events</div><div class="cm-val">${c.attempts.toLocaleString()}</div></div>
+          ${c.failCount>0?`<div class="cm-field"><div class="cm-lbl">Failures</div><div class="cm-val" style="color:var(--red)">${c.failCount.toLocaleString()}</div></div>`:''}
+          ${c.ipCount>1?`<div class="cm-field"><div class="cm-lbl">Distinct IPs</div><div class="cm-val" style="color:var(--orange)">${c.ipCount}</div></div>`:''}
           <div class="cm-field"><div class="cm-lbl">IP Profile</div><div class="cm-val"><a class="ip-link" href="/ip-profile.html?ip=${encodeURIComponent(c.ip)}">view profile →</a></div></div>
         </div>
         <div style="font-size:9px;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">Activity (last 12 h)</div>

@@ -48,9 +48,16 @@ func NewAuditExecTmpRule() *AuditExecTmpRule {
 
 func (r *AuditExecTmpRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "audit",
-		Program:    "auditd",
-		EventTypes: []string{"TMP_WRITE", "EXEC_TMP"},
+		LogSource:   "audit",
+		Program:     "auditd",
+		EventTypes:  []string{"TMP_WRITE", "EXEC_TMP"},
+		DisplayName: "Execution from Temp Directory",
+		Description: "Binary executed from /tmp, /dev/shm, or /var/tmp. CRITICAL if file was written then executed (dropper).",
+		Defaults: detection.RuleDefaults{
+			Threshold:   0,
+			WindowSec:   0,
+			CooldownSec: 900,
+		},
 	}
 }
 
@@ -95,7 +102,7 @@ func isTmpPath(p string) bool {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *AuditExecTmpRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *AuditExecTmpRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getAuditExecTmpState(ctx)
 	path := event.Command
 	now := event.Timestamp
@@ -123,7 +130,7 @@ func (r *AuditExecTmpRule) Evaluate(event *model.NormalizedEvent, ctx *context.D
 		}
 
 		last := s.lastAlertByPath[path]
-		inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+		inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 		if inCooldown {
 			if id := s.lastAlertID[path]; id != "" {

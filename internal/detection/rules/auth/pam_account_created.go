@@ -18,13 +18,16 @@ func NewAccountCreatedRule() *AccountCreatedRule {
 
 func (r *AccountCreatedRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "auth",
-		Program:    "useradd",
-		EventTypes: []string{"ACCOUNT_CREATED"},
+		LogSource:   "auth",
+		Program:     "useradd",
+		EventTypes:  []string{"ACCOUNT_CREATED"},
+		DisplayName: "New Account Created",
+		Description: "New local user account added — common persistence technique after initial access.",
+		Defaults:    detection.RuleDefaults{},
 	}
 }
 
-func (r *AccountCreatedRule) Evaluate(event *model.NormalizedEvent, _ *context.DetectionContext) []*model.Alert {
+func (r *AccountCreatedRule) Evaluate(event *model.NormalizedEvent, _ *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	if event.Username == "" {
 		return nil
 	}

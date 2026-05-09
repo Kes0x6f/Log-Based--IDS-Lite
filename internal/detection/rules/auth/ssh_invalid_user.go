@@ -24,10 +24,15 @@ func NewSSHInvalidUserRule() *SSHInvalidUserRule {
 
 func (r *SSHInvalidUserRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource: "auth",
-		Program:   "sshd",
-		EventTypes: []string{
-			"SSH_INVALID_USER",
+		LogSource:   "auth",
+		Program:     "sshd",
+		EventTypes:  []string{"SSH_INVALID_USER"},
+		DisplayName: "Invalid User Brute Force",
+		Description: "Repeated SSH attempts for usernames that do not exist on the system.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   5,
+			WindowSec:   120,
+			CooldownSec: 120,
 		},
 	}
 }
@@ -59,7 +64,7 @@ func getSSHInvalidUserState(ctx *context.DetectionContext) *sshInvalidUserState 
 	return s
 }
 
-func (r *SSHInvalidUserRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *SSHInvalidUserRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 
 	s := getSSHInvalidUserState(ctx)
 	ip := event.SourceIP
@@ -76,13 +81,13 @@ func (r *SSHInvalidUserRule) Evaluate(event *model.NormalizedEvent, ctx *context
 	}
 
 	// prune old entries (sliding window)
-	s.invalidUserAttempts[ip] = helper.PruneOld(s.invalidUserAttempts[ip], now, r.Window)
+	s.invalidUserAttempts[ip] = helper.PruneOld(s.invalidUserAttempts[ip], now, cfg.Window)
 
-	if len(s.invalidUserAttempts[ip]) < r.Threshold {
+	if len(s.invalidUserAttempts[ip]) < cfg.Threshold {
 		return nil
 	}
 	last := s.lastInvalidUserAlert[ip]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		s.runningCount[ip] += event.EventCount

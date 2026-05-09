@@ -37,9 +37,16 @@ func NewAuditPtraceRule() *AuditPtraceRule {
 
 func (r *AuditPtraceRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "audit",
-		Program:    "auditd",
-		EventTypes: []string{"PTRACE"},
+		LogSource:   "audit",
+		Program:     "auditd",
+		EventTypes:  []string{"PTRACE"},
+		DisplayName: "Ptrace Syscall Detected",
+		Description: "Process calls ptrace — memory injection, credential dumping, or function hooking.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   0,
+			WindowSec:   0,
+			CooldownSec: 600,
+		},
 	}
 }
 
@@ -71,7 +78,7 @@ func getAuditPtraceState(ctx *context.DetectionContext) *auditPtraceState {
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *AuditPtraceRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *AuditPtraceRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getAuditPtraceState(ctx)
 	exe := event.Command // the binary calling ptrace
 	user := event.Username
@@ -86,8 +93,7 @@ func (r *AuditPtraceRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 	count := s.countByKey[key]
 
 	last := s.lastAlertByKey[key]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
-
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 	if inCooldown {
 		if id := s.lastAlertID[key]; id != "" {
 			return []*model.Alert{{

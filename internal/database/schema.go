@@ -24,7 +24,7 @@ func CreateTables(db *sql.DB) error {
 			log_source TEXT,
 			raw_line   TEXT,
 
-			event_count INTEGER
+			event_count INTEGER,
 
 			
 			fail_count      INTEGER DEFAULT 0,
@@ -47,6 +47,29 @@ func CreateTables(db *sql.DB) error {
 			key   TEXT PRIMARY KEY,
 			value TEXT NOT NULL DEFAULT ''
 		);`,
+
+		`CREATE TABLE IF NOT EXISTS rule_config (
+			rule_name    TEXT    PRIMARY KEY,
+			threshold    INTEGER,
+			window_sec   INTEGER,
+			cooldown_sec INTEGER,
+			enabled      INTEGER NOT NULL DEFAULT 1,
+			updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);`,
+
+		`CREATE INDEX IF NOT EXISTS idx_rule_config_name ON rule_config(rule_name);`,
+
+		`CREATE TABLE IF NOT EXISTS rule_config_history (
+			id         INTEGER  PRIMARY KEY AUTOINCREMENT,
+			rule_name  TEXT     NOT NULL,
+			field      TEXT     NOT NULL,
+			old_value  TEXT,
+			new_value  TEXT,
+			changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			changed_by TEXT     NOT NULL DEFAULT 'ui'
+		);`,
+
+		`CREATE INDEX IF NOT EXISTS idx_rch_rule ON rule_config_history(rule_name, changed_at);`,
 	}
 
 	for _, q := range queries {

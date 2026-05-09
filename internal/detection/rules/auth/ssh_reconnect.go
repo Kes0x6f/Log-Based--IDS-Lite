@@ -24,10 +24,15 @@ func NewSSHReconnectRule() *SSHReconnectRule {
 
 func (r *SSHReconnectRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource: "auth",
-		Program:   "sshd",
-		EventTypes: []string{
-			"SSH_DISCONNECT",
+		LogSource:   "auth",
+		Program:     "sshd",
+		EventTypes:  []string{"SSH_DISCONNECT"},
+		DisplayName: "SSH Rapid Reconnect Attack",
+		Description: "Frequent disconnect-reconnect cycles from the same IP — automated tool signature.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   3,
+			WindowSec:   120,
+			CooldownSec: 120,
 		},
 	}
 }
@@ -59,7 +64,7 @@ func getSSHReconnectState(ctx *context.DetectionContext) *sshReconnectState {
 	return s
 }
 
-func (r *SSHReconnectRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *SSHReconnectRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 
 	s := getSSHReconnectState(ctx)
 	ip := event.SourceIP
@@ -76,14 +81,14 @@ func (r *SSHReconnectRule) Evaluate(event *model.NormalizedEvent, ctx *context.D
 	}
 
 	// prune old entries (sliding window)
-	s.disconnectsByIP[ip] = helper.PruneOld(s.disconnectsByIP[ip], now, r.Window)
+	s.disconnectsByIP[ip] = helper.PruneOld(s.disconnectsByIP[ip], now, cfg.Window)
 
-	if len(s.disconnectsByIP[ip]) < r.Threshold {
+	if len(s.disconnectsByIP[ip]) < cfg.Threshold {
 		return nil
 	}
 
 	last := s.lastReconnectAlert[ip]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Window
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		s.runningCount[ip] += event.EventCount

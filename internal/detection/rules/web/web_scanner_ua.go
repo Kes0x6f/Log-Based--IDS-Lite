@@ -32,9 +32,16 @@ func NewWebScannerUARule() *WebScannerUARule {
 
 func (r *WebScannerUARule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource:  "web",
-		Program:    "httpd",
-		EventTypes: []string{"HTTP_PROBE"},
+		LogSource:   "web",
+		Program:     "httpd",
+		EventTypes:  []string{"HTTP_PROBE"},
+		DisplayName: "Web Scanner Detected",
+		Description: "Request user-agent matches Nikto, sqlmap, Gobuster, Nuclei, Burp Suite, and 20+ others.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   0,
+			WindowSec:   0,
+			CooldownSec: 600,
+		},
 	}
 }
 
@@ -96,7 +103,7 @@ var knownScannerLabels = map[string]string{
 
 // ── Evaluate ───────────────────────────────────────────────────────────────
 
-func (r *WebScannerUARule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *WebScannerUARule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	ua := strings.ToLower(event.Message)
 	ip := event.SourceIP
 	now := event.Timestamp
@@ -125,7 +132,7 @@ func (r *WebScannerUARule) Evaluate(event *model.NormalizedEvent, ctx *context.D
 	count := s.countByKey[key]
 
 	last := s.lastAlertByKey[key]
-	inCooldown := !last.IsZero() && now.Sub(last) <= r.Cooldown
+	inCooldown := !last.IsZero() && now.Sub(last) <= cfg.Cooldown
 
 	if inCooldown {
 		if id := s.lastAlertID[key]; id != "" {

@@ -23,11 +23,15 @@ func NewSSHDistributedBruteForceRule() *SSHDistributedBruteForceRule {
 
 func (r *SSHDistributedBruteForceRule) Meta() detection.RuleMeta {
 	return detection.RuleMeta{
-		LogSource: "auth",
-		Program:   "sshd",
-		EventTypes: []string{
-			"SSH_FAILED",
-			"SSH_INVALID_USER",
+		LogSource:   "auth",
+		Program:     "sshd",
+		EventTypes:  []string{"SSH_FAILED", "SSH_INVALID_USER"},
+		DisplayName: "Distributed Brute Force",
+		Description: "Three or more distinct IPs all failing against the same username — coordinated attack.",
+		Defaults: detection.RuleDefaults{
+			Threshold:   3,
+			WindowSec:   180,
+			CooldownSec: 180,
 		},
 	}
 }
@@ -59,7 +63,7 @@ func getSSHDistributedState(ctx *context.DetectionContext) *sshDistributedState 
 	return s
 }
 
-func (r *SSHDistributedBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext) []*model.Alert {
+func (r *SSHDistributedBruteForceRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 
 	s := getSSHDistributedState(ctx)
 	ip := event.SourceIP
