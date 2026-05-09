@@ -97,11 +97,13 @@ func (r *Web404Rule) Evaluate(event *model.NormalizedEvent, ctx *context.Detecti
 		return nil
 	}
 
+	event.FailCount = count
+
 	alert := model.NewAlert(
 		"Web Path Enumeration",
 		model.SeverityMedium,
 		"reconnaissance",
-		fmt.Sprintf("IP %s generated %d 404 responses in %v — possible path enumeration", ip, count, r.Window),
+		fmt.Sprintf("IP %s: %d 404 responses in %v — path enumeration", ip, count, r.Window),
 		event,
 		count,
 	)

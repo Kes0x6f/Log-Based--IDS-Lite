@@ -2,6 +2,7 @@ package rule
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Kes0x6f/Log-Based--IDS/internal/detection"
@@ -97,11 +98,28 @@ func (r *WebAuthBruteRule) Evaluate(event *model.NormalizedEvent, ctx *context.D
 		return nil
 	}
 
+	endpoint := ""
+	if parts := strings.SplitN(event.Command, " ", 2); len(parts) == 2 {
+		endpoint = parts[1]
+	}
+
+	event.FailCount = count
+	if endpoint != "" {
+		event.ThreatDetail = fmt.Sprintf("endpoint:%s", endpoint)
+	}
+
 	alert := model.NewAlert(
 		"Web Login Brute Force",
 		model.SeverityHigh,
 		"credential-access",
-		fmt.Sprintf("IP %s: %d authentication failures in %v — possible web login brute force", ip, count, r.Window),
+		fmt.Sprintf("IP %s: %d auth failures in %v%s",
+			ip, count, r.Window,
+			func() string {
+				if endpoint != "" {
+					return " on " + endpoint
+				}
+				return ""
+			}()),
 		event,
 		count,
 	)

@@ -100,8 +100,15 @@ func (r *WebMethodRule) Evaluate(event *model.NormalizedEvent, ctx *context.Dete
 		return nil
 	}
 
-	// Extract method from "METHOD /uri"
-	method := strings.ToUpper(strings.SplitN(event.Command, " ", 2)[0])
+	// Extract method and URI from "METHOD /uri" stored in Command.
+	// Both are needed: TRACE / is recon noise; DELETE /api/users/1 is active attack.
+	parts := strings.SplitN(event.Command, " ", 2)
+	method := strings.ToUpper(parts[0])
+	uri := ""
+	if len(parts) == 2 {
+		uri = parts[1]
+	}
+
 	meta, ok := suspiciousMethodDetails[method]
 	if !ok {
 		return nil
@@ -126,12 +133,29 @@ func (r *WebMethodRule) Evaluate(event *model.NormalizedEvent, ctx *context.Dete
 		return nil
 	}
 
+	// ── Enrichment ────────────────────────────────────────────────────────
+	// FailCount: how many times this IP has used this method in this cooldown
+	// window — 1 OPTIONS is recon curiosity; 50 is a scanner.
+	//
+	// ThreatDetail: method + URI surface what the attacker was actually
+	// targeting, which matters most for PUT/DELETE/PATCH where the endpoint
+	// determines the severity (DELETE /healthz vs DELETE /api/admin/users).
+	uriShort := uri
+	if len(uriShort) > 80 {
+		uriShort = uriShort[:77] + "..."
+	}
+
+	event.FailCount = count
+	event.ThreatDetail = fmt.Sprintf("method:%s uri:%s",
+		method, strings.ReplaceAll(uriShort, " ", "-"))
+
 	s.countByKey[key] = 1
+
 	alert := model.NewAlert(
 		"Unusual HTTP Method",
 		meta.Severity,
 		"web-probe",
-		fmt.Sprintf("IP %s used HTTP %s — %s", ip, method, meta.Reason),
+		fmt.Sprintf("IP %s: %s %s — %s", ip, method, uri, meta.Reason),
 		event,
 		count,
 	)

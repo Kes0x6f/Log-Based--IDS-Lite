@@ -112,12 +112,20 @@ func (r *WebFloodRule) Evaluate(event *model.NormalizedEvent, ctx *context.Detec
 		return nil
 	}
 
+	tier := "MEDIUM"
 	severity := model.SeverityMedium
 	label := "High Request Rate"
 	if count >= r.CriticalThreshold {
+
+		tier = "HIGH"
 		severity = model.SeverityHigh
 		label = "Extreme Request Rate"
 	}
+
+	rate := count // count = requests in the last 1-minute window = requests/min
+
+	event.FailCount = count
+	event.ThreatDetail = fmt.Sprintf("rate:%d/min tier:%s", rate, tier)
 
 	alert := model.NewAlert(
 		label,

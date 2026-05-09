@@ -139,11 +139,18 @@ func (r *WebScannerUARule) Evaluate(event *model.NormalizedEvent, ctx *context.D
 	}
 
 	s.countByKey[key] = 1
+
+	uaShort := ua
+	if len(uaShort) > 80 {
+		uaShort = uaShort[:77] + "..."
+	}
+	event.ThreatDetail = fmt.Sprintf("ua:%s tool:%s", uaShort, strings.ReplaceAll(toolName, " ", "-"))
+
 	alert := model.NewAlert(
 		"Web Scanner Detected",
 		model.SeverityHigh,
 		"reconnaissance",
-		fmt.Sprintf("Scanner tool %s detected from IP %s (%d requests)", toolName, ip, count),
+		fmt.Sprintf("Scanner %s from IP %s (%d requests)", toolName, ip, count),
 		event,
 		count,
 	)
