@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -44,17 +44,17 @@ type Parser interface {
 
 func ParserWorker(input <-chan collector.RawLog, output chan<- *model.NormalizedEvent) {
 
-	for log := range input {
+	for rawLog := range input {
 
-		line := strings.TrimSpace(log.Message)
+		line := strings.TrimSpace(rawLog.Message)
 		if line == "" {
 			continue
 		}
 
 		// ── Fast path: raw audit.log lines ──────────────────────────────────
 		// audit.log records start with "type=" and carry no syslog header.
-		if log.Source == "audit" && strings.HasPrefix(line, "type=") {
-			event := parsers.ParseRawAuditLine(line, log.Source)
+		if rawLog.Source == "audit" && strings.HasPrefix(line, "type=") {
+			event := parsers.ParseRawAuditLine(line, rawLog.Source)
 			if event != nil && event.EventType != "" {
 				output <- event
 			}
@@ -64,8 +64,8 @@ func ParserWorker(input <-chan collector.RawLog, output chan<- *model.Normalized
 		// ── Fast path: Apache2 / Nginx access logs ───────────────────────────
 		// Combined Log Format has no syslog header; the header regex would not
 		// match and the line would be silently dropped without this branch.
-		if log.Source == "apache2" || log.Source == "nginx" {
-			event := parsers.ParseWebLogLine(line, log.Source)
+		if rawLog.Source == "apache2" || rawLog.Source == "nginx" {
+			event := parsers.ParseWebLogLine(line, rawLog.Source)
 			if event != nil && event.EventType != "" {
 				output <- event
 			}
@@ -100,24 +100,29 @@ func ParserWorker(input <-chan collector.RawLog, output chan<- *model.Normalized
 		}
 
 		if err != nil {
-			fmt.Println("timestamp parse error:", err)
+			log.Printf("ParserWorker: timestamp parse error: %v", err)
 			continue
 		}
 
 		event := &model.NormalizedEvent{
 			Timestamp:  timestamp,
 			Host:       matches[2],
-			LogSource:  log.Source,
+			LogSource:  rawLog.Source,
 			Program:    matches[3],
 			Message:    matches[4],
-			RawLine:    log.Message,
+			RawLine:    rawLog.Message,
 			EventCount: 1,
 		}
 
 		if parser, ok := programParsers[event.Program]; ok {
 			parser(event)
 		}
-		fmt.Println(event)
+
+		// Skip events the parser did not classify — they carry no EventType
+		// and would waste engine work without matching any rule.
+		if event.EventType == "" {
+			continue
+		}
 
 		output <- event
 	}

@@ -26,7 +26,7 @@ func (r *SSHRootTargetRule) Meta() detection.RuleMeta {
 		Program:     "sshd",
 		EventTypes:  []string{"SSH_FAILED", "SSH_INVALID_USER"},
 		DisplayName: "SSH Root Targeting",
-		Description: "Repeated failed SSH attempts specifically targeting the root account.",
+		Description: "Failed SSH attempt targeting the root account — fires on first occurrence, then deduplicates within a cooldown window.",
 		Defaults: detection.RuleDefaults{
 			Threshold:   0,
 			WindowSec:   120,

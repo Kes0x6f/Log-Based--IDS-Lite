@@ -19,6 +19,20 @@ func SUDOParser(event *model.NormalizedEvent) *model.NormalizedEvent {
 
 	msg := event.Message
 
+	// SUDO AUTH FAILURE — must be checked before COMMAND= because some failure
+	if strings.Contains(msg, "authentication failure") ||
+		strings.Contains(msg, "incorrect password") {
+
+		event.EventType = "SUDO_FAIL"
+		event.Username = extractSudoUserFromKV(msg)
+		if event.Username == "" {
+			event.Username = extractSudoUser(msg)
+		}
+		event.EventCount = extractAttemptCount(msg)
+
+		return event
+	}
+
 	// SUDO COMMAND EXECUTION
 	if strings.Contains(msg, "COMMAND=") {
 
@@ -26,16 +40,6 @@ func SUDOParser(event *model.NormalizedEvent) *model.NormalizedEvent {
 		event.Username = extractSudoUser(msg)
 		event.Command = extractSudoCommand(msg)
 		event.EventCount = extractAttemptCount(msg)
-
-		return event
-	}
-
-	// SUDO AUTH FAILURE
-	if strings.Contains(msg, "authentication failure") ||
-		strings.Contains(msg, "incorrect password") {
-
-		event.EventType = "SUDO_FAIL"
-		event.Username = extractSudoUserFromKV(msg)
 
 		return event
 	}

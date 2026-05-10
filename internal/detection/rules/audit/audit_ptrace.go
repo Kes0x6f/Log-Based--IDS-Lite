@@ -80,7 +80,10 @@ func getAuditPtraceState(ctx *context.DetectionContext) *auditPtraceState {
 
 func (r *AuditPtraceRule) Evaluate(event *model.NormalizedEvent, ctx *context.DetectionContext, cfg detection.ResolvedConfig) []*model.Alert {
 	s := getAuditPtraceState(ctx)
-	exe := event.Command // the binary calling ptrace
+	exe := event.CallerExe // the binary calling ptrace
+	if exe == "" {
+		exe = event.Command
+	}
 	user := event.Username
 	now := event.Timestamp
 

@@ -179,7 +179,7 @@ func (r *WebPathProbeRule) Evaluate(event *model.NormalizedEvent, ctx *context.D
 	event.ThreatDetail = fmt.Sprintf("category:%s", strings.ReplaceAll(matched.Name, " ", "-"))
 
 	alert := model.NewAlert(
-		matched.Name+" Probe",
+		"Web Path Probe",
 		matched.Severity,
 		"web-attack",
 		fmt.Sprintf("IP %s: %s in URI %s (%d requests)", ip, matched.Name, parts[1], count),

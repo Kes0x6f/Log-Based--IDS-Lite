@@ -25,6 +25,24 @@ import (
 func main() {
 	log.Println("MAIN STARTED")
 
+	// ── Config from environment (falls back to safe defaults) ───────────────
+	// Override any value without recompiling:
+	//   IDS_ADDR=0.0.0.0:8888 IDS_DB=data/ids.db sudo ./ids-agent
+	env := func(key, def string) string {
+		if v := os.Getenv(key); v != "" {
+			return v
+		}
+		return def
+	}
+
+	listenAddr := env("IDS_ADDR", "127.0.0.1:8888")
+	dbPath := env("IDS_DB", "data/ids.db")
+	logAuth := env("IDS_LOG_AUTH", "/var/log/auth.log")
+	logKern := env("IDS_LOG_KERN", "/var/log/kern.log")
+	logAudit := env("IDS_LOG_AUDIT", "/var/log/audit/audit.log")
+	logApache := env("IDS_LOG_APACHE", "/var/log/apache2/access.log")
+	logNginx := env("IDS_LOG_NGINX", "/var/log/nginx/access.log")
+
 	// ── Context & signal handling ────────────────────────────────────────────
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -38,7 +56,10 @@ func main() {
 	}()
 
 	// ── Database ─────────────────────────────────────────────────────────────
-	db, err := database.InitDB("data/ids.db")
+	if err := os.MkdirAll("data", 0750); err != nil {
+		log.Fatal("cannot create data directory:", err)
+	}
+	db, err := database.InitDB(dbPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -68,7 +89,7 @@ func main() {
 	}
 	router := api.NewRouter(apiHandler)
 	server := &api.Server{Handler: router}
-	go server.Start(":8888")
+	go server.Start(listenAddr)
 
 	rawLogChan := make(chan collector.RawLog, 1000)
 	parseChan := make(chan *model.NormalizedEvent, 1000)
@@ -76,13 +97,13 @@ func main() {
 
 	filecollectors := []collector.FileCollector{
 		{
-			FilePath:    "/var/log/auth.log",
+			FilePath:    logAuth,
 			Source:      "auth",
 			Broadcaster: broadcaster,
 			Stats:       stats,
 		},
 		{
-			FilePath:    "/var/log/kern.log",
+			FilePath:    logKern,
 			Source:      "kern",
 			Broadcaster: broadcaster,
 			Stats:       stats,
@@ -90,19 +111,19 @@ func main() {
 		{
 			// Raw auditd log — ParserWorker detects "type=..." lines and
 			// bypasses the syslog header regex automatically.
-			FilePath:    "/var/log/audit/audit.log",
+			FilePath:    logAudit,
 			Source:      "audit",
 			Broadcaster: broadcaster,
 			Stats:       stats,
 		},
 		{
-			FilePath:    "/var/log/apache2/access.log",
+			FilePath:    logApache,
 			Source:      "apache2",
 			Broadcaster: broadcaster,
 			Stats:       stats,
 		},
 		{
-			FilePath:    "/var/log/nginx/access.log",
+			FilePath:    logNginx,
 			Source:      "nginx",
 			Broadcaster: broadcaster,
 			Stats:       stats,
@@ -121,10 +142,13 @@ func main() {
 		authrule.NewSSHDistributedBruteForceRule(),
 
 		// ── SUDO ─────────────────────────────────────────────────────────────
+		// SudoCommandAbuseRule must be before SudoSensitiveCommandRule:
+		// it writes command-frequency data into the shared sudo context that
+		// SudoSensitiveCommandRule reads for risk scoring.
 		authrule.NewSudoBruteForceRule(),
 		authrule.NewSudoSuccessAfterFailRule(),
-		authrule.NewSudoSensitiveCommandRule(),
 		authrule.NewSudoCommandAbuseRule(),
+		authrule.NewSudoSensitiveCommandRule(),
 		authrule.NewSudoRootAbuseRule(),
 		authrule.NewSudoSessionAbuseRule(),
 
@@ -174,7 +198,14 @@ func main() {
 	apiHandler.Engine = engine
 
 	for _, c := range filecollectors {
-		go c.Start(rawLogChan)
+		c := c // capture loop variable
+		go func() {
+			if err := c.Start(rawLogChan); err != nil {
+				// Optional sources (apache2, nginx, audit) may not exist on every
+				// host — log as a warning so the operator knows, but keep running.
+				log.Printf("collector [%s] failed to start (%s): %v", c.Source, c.FilePath, err)
+			}
+		}()
 	}
 
 	// ── NFLOG collector ───────────────────────────────────────────────────────

@@ -33,7 +33,7 @@ func (r *UFWPortScanRule) Meta() detection.RuleMeta {
 		Program:     "kernel",
 		EventTypes:  []string{"FW_BLOCK"},
 		DisplayName: "UFW Port Scan Detected",
-		Description: "Single source IP hits 10+ distinct destination ports within 1 minute — automated scan.",
+		Description: "Single source IP hits 6+ distinct destination ports within 1 minute — automated scan.",
 		Defaults: detection.RuleDefaults{
 			Threshold:   6,
 			WindowSec:   60,
