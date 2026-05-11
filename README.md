@@ -285,19 +285,20 @@ ssh -L 8888:127.0.0.1:8888 user@server-ip
 
 ### Dashboard pages
 
-| Page | URL | Purpose |
-|------|-----|---------|
-| Dashboard | `/` | Summary cards, severity chart, recent alerts, live log stream |
-| Alerts | `/alerts.html` | Full alert table with filtering, sorting, and CSV export |
-| Alert Detail | `/alert-detail.html?id=...` | Per-alert raw log evidence and related alerts |
-| IP Profile | `/ip-profile.html?ip=...` | Per-IP attack timeline and all alerts |
-| Brute Force | `/brute-force.html` | Active brute-force campaigns grouped by IP |
-| Attack Timeline | `/timeline.html` | Chronological or IP-grouped event view |
-| Rules Manager | `/rules.html` | Fire counts, enable/disable, threshold overrides |
-| Log Sources | `/sources.html` | Collector health and lines-per-source counters |
-| Reports | `/reports.html` | Aggregated statistics with time-window selection |
-| Settings | `/settings.html` | Retention, webhook, sensitivity, clock format |
-| Live Logs | `/live` | Real-time SSE stream of raw log lines by source |
+| Page            | URL                         | Purpose                                                       |
+| --------------- | --------------------------- | ------------------------------------------------------------- |
+| Dashboard       | `/`                         | Summary cards, severity chart, recent alerts, live log stream |
+| Alerts          | `/alerts.html`              | Full alert table with filtering, sorting, and CSV export      |
+| Alert Detail    | `/alert-detail.html?id=...` | Per-alert raw log evidence and related alerts                 |
+| IP Profile      | `/ip-profile.html?ip=...`   | Per-IP attack timeline and all alerts                         |
+| Brute Force     | `/brute-force.html`         | Active brute-force campaigns grouped by IP                    |
+| Attack Timeline | `/timeline.html`            | Chronological or IP-grouped event view                        |
+| Rules Manager   | `/rules.html`               | Fire counts, enable/disable, threshold overrides              |
+| Log Sources     | `/sources.html`             | Collector health and lines-per-source counters                |
+| Reports         | `/reports.html`             | Aggregated statistics with time-window selection              |
+| Settings        | `/settings.html`            | Retention, webhook, sensitivity, clock format                 |
+| Live Logs       | `/live`                     | Real-time SSE stream of raw log lines by source               |
+
 ![Dashboard](assets/dashboard1.jpg)
 ![Dashboard2](assets/dashboard2.jpg)
 ![Alerts](assets/alerts.jpg)
