@@ -1,0 +1,20 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=IDS Dashboard
+GenericName=Intrusion Detection Dashboard
+Comment=Open the Log-IDS security dashboard in your browser
+# Opens the dashboard URL in whatever the default browser is.
+# xdg-open handles this correctly on GNOME, KDE, XFCE and most Ubuntu desktops.
+Exec=xdg-open http://127.0.0.1:8888
+# Use a built-in system security icon — no custom icon file needed.
+Icon=security-high
+# Do not open a terminal window.
+Terminal=false
+# Show in the System and Security categories of the app menu.
+Categories=System;Security;Network;
+# Keywords help users find it by searching "ids", "intrusion", "security".
+Keywords=ids;intrusion;detection;security;dashboard;alerts;
+# Only show this launcher if the IDS service is installed.
+# Remove this line if the launcher should always appear.
+TryExec=/opt/ids/ids-agent

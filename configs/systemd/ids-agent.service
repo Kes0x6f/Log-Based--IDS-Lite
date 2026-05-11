@@ -1,0 +1,80 @@
+# /etc/systemd/system/ids-agent.service
+#
+# Log-IDS — host-based intrusion detection system
+#
+# Install:
+#   sudo cp configs/systemd/ids-agent.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable ids-agent    # start on every boot
+#   sudo systemctl start  ids-agent    # start right now
+#
+# Check status:
+#   sudo systemctl status ids-agent
+#
+# View live logs:
+#   sudo journalctl -u ids-agent -f
+#
+# Stop:
+#   sudo systemctl stop ids-agent      # sends SIGTERM — cleans up iptables rules
+#
+
+[Unit]
+Description=Log-Based Intrusion Detection System
+Documentation=https://github.com/Kes0x6f/Log-Based--IDS
+# Start after the network is up so the HTTP server can bind correctly,
+# and after auditd so audit records are available from the first second.
+After=network.target auditd.service
+# If auditd is installed, wait for it — but do not fail if it is not.
+Wants=auditd.service
+
+[Service]
+Type=simple
+
+# Must run as root:
+#   - iptables / NFLOG requires CAP_NET_ADMIN
+#   - /var/log/audit/audit.log is root-readable only by default
+User=root
+Group=root
+
+# All relative paths in the binary (web/, data/) resolve against this.
+# The web/ directory and the ids-agent binary must both exist here.
+WorkingDirectory=/opt/ids
+
+# The binary itself.
+ExecStart=/opt/ids/ids-agent
+
+# Systemd sends SIGTERM on stop — the IDS handles this, removes iptables
+# rules, and exits. Give it up to 30 seconds before sending SIGKILL.
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Restart automatically if the process crashes (but not on a clean exit).
+Restart=on-failure
+RestartSec=5
+
+# Log output is captured by journald automatically.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ids-agent
+
+# ── Optional environment overrides ──────────────────────────────────────────
+# Uncomment and edit any line below to override the default value.
+# Restart the service after any change: sudo systemctl restart ids-agent
+
+# Listen address (default: loopback only — do not expose to the network)
+#Environment="IDS_ADDR=127.0.0.1:8888"
+
+# Database file path (default: relative to WorkingDirectory)
+#Environment="IDS_DB=data/ids.db"
+
+# Log file paths (override if your distro uses different locations)
+#Environment="IDS_LOG_AUTH=/var/log/auth.log"
+#Environment="IDS_LOG_KERN=/var/log/kern.log"
+#Environment="IDS_LOG_AUDIT=/var/log/audit/audit.log"
+#Environment="IDS_LOG_APACHE=/var/log/apache2/access.log"
+#Environment="IDS_LOG_NGINX=/var/log/nginx/access.log"
+
+[Install]
+# Start as part of the normal multi-user boot target.
+WantedBy=multi-user.target

@@ -1,0 +1,79 @@
+# ============================================================
+# Log-IDS  —  auditd detection rules
+# ============================================================
+# Install:
+#   sudo cp ids.rules /etc/audit/rules.d/ids.rules
+#   sudo augenrules --load
+#   sudo systemctl restart auditd
+#
+# Verify rules are active:
+#   sudo auditctl -l | grep -E "key=(read_sensitive|write_sensitive|cron_write|service_write|setuid_binary|ptrace|capset|exec_tmp|tmp_write|ufw_change)"
+#
+# Requirements:
+#   - auditd installed:  sudo apt install auditd audispd-plugins
+#   - System must be 64-bit (b64 arch); add matching b32 rules if 32-bit
+#     compat is needed.
+# ============================================================
+
+# ── 1. Sensitive file reads (credential access) ──────────────────────────────
+# Fires: AuditFileReadRule → "Sensitive File Read" (HIGH)
+-a always,exit -F arch=b64 -S open,openat,openat2 -F path=/etc/shadow         -F perm=r -k read_sensitive
+-a always,exit -F arch=b64 -S open,openat,openat2 -F path=/etc/gshadow        -F perm=r -k read_sensitive
+-a always,exit -F arch=b64 -S open,openat,openat2 -F path=/etc/sudoers        -F perm=r -k read_sensitive
+-a always,exit -F arch=b64 -S open,openat,openat2 -F dir=/etc/sudoers.d       -F perm=r -k read_sensitive
+-a always,exit -F arch=b64 -S open,openat,openat2 -F path=/root/.ssh/authorized_keys -F perm=r -k read_sensitive
+
+# ── 2. Sensitive file writes (tampering) ─────────────────────────────────────
+# Fires: AuditFileWriteRule → "Sensitive File Modified" (CRITICAL)
+-a always,exit -F arch=b64 -S open,openat,openat2 -F path=/etc/passwd         -F perm=w -k write_sensitive
+-a always,exit -F arch=b64 -S open,openat,openat2 -F path=/etc/shadow         -F perm=w -k write_sensitive
+-a always,exit -F arch=b64 -S open,openat,openat2 -F path=/etc/sudoers        -F perm=w -k write_sensitive
+-a always,exit -F arch=b64 -S open,openat,openat2 -F dir=/root/.ssh           -F perm=w -k write_sensitive
+-a always,exit -F arch=b64 -S open,openat,openat2 -F path=/etc/hosts          -F perm=w -k write_sensitive
+
+# ── 3. Cron job writes (persistence) ─────────────────────────────────────────
+# Fires: AuditCronWriteRule → "Cron Job Created or Modified" (HIGH)
+-a always,exit -F arch=b64 -S open,openat,openat2 -F dir=/etc/cron.d         -F perm=w -k cron_write
+-a always,exit -F arch=b64 -S open,openat,openat2 -F dir=/etc/cron.daily     -F perm=w -k cron_write
+-a always,exit -F arch=b64 -S open,openat,openat2 -F dir=/etc/cron.hourly    -F perm=w -k cron_write
+-a always,exit -F arch=b64 -S open,openat,openat2 -F dir=/etc/cron.weekly    -F perm=w -k cron_write
+-a always,exit -F arch=b64 -S open,openat,openat2 -F dir=/etc/cron.monthly   -F perm=w -k cron_write
+-a always,exit -F arch=b64 -S open,openat,openat2 -F dir=/var/spool/cron     -F perm=w -k cron_write
+-a always,exit -F arch=b64 -S open,openat,openat2 -F path=/etc/crontab       -F perm=w -k cron_write
+
+# ── 4. Systemd service writes (persistence) ──────────────────────────────────
+# Fires: AuditServiceWriteRule → "Systemd Service Created or Modified" (CRITICAL)
+-a always,exit -F arch=b64 -S open,openat,openat2 -F dir=/etc/systemd/system          -F perm=w -k service_write
+-a always,exit -F arch=b64 -S open,openat,openat2 -F dir=/lib/systemd/system          -F perm=w -k service_write
+-a always,exit -F arch=b64 -S open,openat,openat2 -F dir=/usr/lib/systemd/system      -F perm=w -k service_write
+
+# ── 5. Setuid bit set on binary (privilege escalation) ───────────────────────
+# Fires: AuditSetuidRule → "Setuid Bit Set on Binary" (CRITICAL)
+# The IDS checks the mode argument directly from the SYSCALL record.
+-a always,exit -F arch=b64 -S chmod,fchmod,fchmodat -k setuid_binary
+
+# ── 6. Ptrace syscall (memory injection / credential dumping) ────────────────
+# Fires: AuditPtraceRule → "Ptrace Syscall Detected" (CRITICAL)
+-a always,exit -F arch=b64 -S ptrace -k ptrace
+
+# ── 7. Capability changes (privilege escalation without a shell) ──────────────
+# Fires: AuditCapsetRule → "Capability Change Detected" (HIGH/CRITICAL)
+-a always,exit -F arch=b64 -S capset -k capset
+
+# ── 8. Execution from temp directories (malware dropper / stager) ────────────
+# Fires: AuditExecTmpRule → "Execution from Temp Directory" (HIGH/CRITICAL)
+-a always,exit -F arch=b64 -S execve -F dir=/tmp     -k exec_tmp
+-a always,exit -F arch=b64 -S execve -F dir=/dev/shm -k exec_tmp
+-a always,exit -F arch=b64 -S execve -F dir=/var/tmp -k exec_tmp
+
+# ── 9. Writes to temp directories (write→execute dropper correlation) ─────────
+# Fires: AuditExecTmpRule write side — correlates with exec_tmp for CRITICAL
+-a always,exit -F arch=b64 -S open,openat,openat2 -F dir=/tmp     -F perm=w -k tmp_write
+-a always,exit -F arch=b64 -S open,openat,openat2 -F dir=/dev/shm -F perm=w -k tmp_write
+-a always,exit -F arch=b64 -S open,openat,openat2 -F dir=/var/tmp -F perm=w -k tmp_write
+
+# ── 10. UFW firewall config changes (firewall weakening) ─────────────────────
+# Fires: UFWRuleChangeRule → "UFW Firewall Rule Changed" (CRITICAL/HIGH)
+-a always,exit -F arch=b64 -S open,openat,openat2 -F path=/etc/ufw/user.rules  -F perm=w -k ufw_change
+-a always,exit -F arch=b64 -S open,openat,openat2 -F path=/etc/ufw/user6.rules -F perm=w -k ufw_change
+-a always,exit -F arch=b64 -S open,openat,openat2 -F dir=/etc/ufw              -F perm=w -k ufw_change
