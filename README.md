@@ -29,14 +29,8 @@ Or click **IDS Dashboard** in your application menu.
 
 ## How It Works
 
-```
-Log files ──► File Collectors ──► Parser ──► Detection Engine ──► Alert Database
-                                                                        │
-NFLOG packets ──► NFLOG Collector ─────────────────────────────────────┘
-                                                                        │
-                                                         Web Dashboard ◄┘
-                                                    http://127.0.0.1:8888
-```
+<img src="assets/how-it-works.png" alt="How It Works" width="700">
+
 
 - **Collectors** tail log files (`auth.log`, `kern.log`, `audit.log`, `access.log`) and capture kernel netfilter packets via NFLOG for firewall events.
 - **Parser** normalises raw log lines into structured events with source, program, event type, and context fields.
@@ -304,8 +298,22 @@ ssh -L 8888:127.0.0.1:8888 user@server-ip
 | Reports | `/reports.html` | Aggregated statistics with time-window selection |
 | Settings | `/settings.html` | Retention, webhook, sensitivity, clock format |
 | Live Logs | `/live` | Real-time SSE stream of raw log lines by source |
+![Dashboard](assets/dashboard1.jpg)
+![Dashboard2](assets/dashboard2.jpg)
+![Alerts](assets/alerts.jpg)
+![Live Logs](assets/live.jpg)
+![IP Profile](assets/ip-profile.jpg)
+![Alert Detail](assets/alert-detail.jpg)
+![Brute Force](assets/brute-force.jpg)
+![Attack Timeline](assets/timeline.jpg)
+![Rules Manager](assets/rules.jpg)
+![Log Sources](assets/sources.jpg)
+![Reports](assets/reports.jpg)
+![Settings](assets/settings.jpg)
+
 
 ---
+
 
 ## Detection Coverage
 
