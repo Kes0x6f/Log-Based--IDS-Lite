@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 
@@ -56,8 +57,13 @@ func main() {
 	}()
 
 	// ── Database ─────────────────────────────────────────────────────────────
-	if err := os.MkdirAll("data", 0750); err != nil {
-		log.Fatal("cannot create data directory:", err)
+	// Ensure the directory that holds the database file exists.
+	// Works for both the default relative path ("data/ids.db") and any
+	// absolute path set via IDS_DB (e.g. "/var/lib/ids/ids.db").
+	if dbDir := filepath.Dir(dbPath); dbDir != "" && dbDir != "." {
+		if err := os.MkdirAll(dbDir, 0750); err != nil {
+			log.Fatal("cannot create database directory:", err)
+		}
 	}
 	db, err := database.InitDB(dbPath)
 	if err != nil {
