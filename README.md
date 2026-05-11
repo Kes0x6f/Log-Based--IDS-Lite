@@ -1,4 +1,4 @@
-# Log-IDS
+# Log-Based--IDS-Lite
 
 A host-based intrusion detection system for Linux. It monitors system log sources in real time, applies stateful detection rules, and stores alerts in a local database. The engine runs as a background systemd service that starts automatically on boot. When you want to review alerts, open the web dashboard in your browser.
 
