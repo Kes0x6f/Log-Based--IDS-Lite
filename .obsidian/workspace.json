@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "README.md",
+                "file": "DOCS.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "README"
+              "title": "DOCS"
             }
           }
         ]
@@ -185,6 +185,8 @@
   },
   "active": "bc9abe63fa766772",
   "lastOpenFiles": [
+    "README.md",
+    "DOCS.md",
     "assets/settings.jpg",
     "assets/reports.jpg",
     "assets/sources.jpg",
@@ -195,7 +197,6 @@
     "assets/ip-profile.jpg",
     "assets/live.jpg",
     "assets/alerts.jpg",
-    "assets/dashboard2.jpg",
     "data/ids.db-journal",
     "assets",
     "New folder"
