@@ -102,7 +102,7 @@ Or search for **IDS Dashboard** in your application menu.
 |`audit`|9|Setuid backdoor, ptrace, credential file access, dropper execution|
 |`web`|6|Scanner UA, SQL injection, path traversal, login brute force|
 
-→ See [DOCS.md](https://claude.ai/chat/DOCS.md#detection-coverage) for the full rule list with thresholds and severity levels.
+→ See [DOCS.md](./DOCS.md#detection-coverage) for the full rule list with thresholds and severity levels.
 
 ---
 
@@ -154,16 +154,16 @@ Log-Based--IDS/
 
 ## Documentation
 
-Full reference documentation is in **[DOCS.md](https://claude.ai/chat/DOCS.md)**:
+Full reference documentation is in **[DOCS.md](./DOCS.md)**:
 
-- [Full detection rule list with thresholds](https://claude.ai/chat/DOCS.md#detection-coverage)
-- [Enabling and verifying auditd rules](https://claude.ai/chat/DOCS.md#enabling-audit-rules)
-- [Simulating attacks for demo/testing](https://claude.ai/chat/DOCS.md#simulating-attacks)
-- [Configuration via environment variables](https://claude.ai/chat/DOCS.md#configuration)
-- [Dashboard pages reference](https://claude.ai/chat/DOCS.md#dashboard-pages)
-- [Warnings and ethical considerations](https://claude.ai/chat/DOCS.md#warnings-and-considerations)
-- [Known limitations](https://claude.ai/chat/DOCS.md#known-limitations)
-- [Uninstalling](https://claude.ai/chat/DOCS.md#uninstalling)
+- [Full detection rule list with thresholds](./DOCS.md#detection-coverage)
+- [Enabling and verifying auditd rules](./DOCS.md#enabling-audit-rules)
+- [Simulating attacks for demo/testing](./DOCS.md#simulating-attacks)
+- [Configuration via environment variables](./DOCS.md#configuration)
+- [Dashboard pages reference](./DOCS.md#dashboard-pages)
+- [Warnings and ethical considerations](./DOCS.md#warnings-and-considerations)
+- [Known limitations](./DOCS.md#known-limitations)
+- [Uninstalling](./DOCS.md#uninstalling)
 
 ---
 
