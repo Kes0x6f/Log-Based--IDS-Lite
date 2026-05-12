@@ -1,6 +1,10 @@
+<<<<<<< HEAD
 <div align="center">
 
 # Log-IDS
+=======
+# Log-Based--IDS-Lite
+>>>>>>> c3c97fa0af32fae883f19f5f99188fb91936e05c
 
 **A host-based intrusion detection system for Linux**
 
