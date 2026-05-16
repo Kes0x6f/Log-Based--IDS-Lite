@@ -1,10 +1,7 @@
-<<<<<<< HEAD
+
 <div align="center">
 
-# Log-IDS
-=======
 # Log-Based--IDS-Lite
->>>>>>> c3c97fa0af32fae883f19f5f99188fb91936e05c
 
 **A host-based intrusion detection system for Linux**
 
@@ -15,22 +12,103 @@ Monitors your system logs and network traffic in real time, detects intrusion pa
 </div>
 
 ---
+## Screenshots
 
+### Dashboard Overview
 
-![Dashboard|516](assets/dashboard1.jpg)
-![Dashboard2|521](assets/dashboard2.jpg)
-![Alerts|517](assets/alerts.jpg)
-![Live Logs|521](assets/live.jpg)
-![IP Profile|521](assets/ip-profile.jpg)
-![Alert Detail|521](assets/alert-detail.jpg)
-![Brute Force|523](assets/brute-force.jpg)
-![Attack Timeline|524](assets/timeline.jpg)
-![Rules Manager|524](assets/rules.jpg)
-![Log Sources|527](assets/sources.jpg)
-![Reports|525](assets/reports.jpg)
-![Settings|529](assets/settings.jpg)
+<a href="assets/dashboard1.jpg">
+  <img src="assets/dashboard1.jpg" alt="Dashboard overview" width="100%">
+</a>
 
+<p align="center">
+  <em>Main dashboard showing alert statistics, severity distribution, and recent activity.</em>
+</p>
 
+### Dashboard Pages
+
+<table>
+  <tr>
+    <td width="50%">
+      <a href="assets/dashboard2.jpg">
+        <img src="assets/dashboard2.jpg" alt="Dashboard analytics" width="100%">
+      </a>
+      <p align="center"><strong>Dashboard Analytics</strong></p>
+    </td>
+    <td width="50%">
+      <a href="assets/alerts.jpg">
+        <img src="assets/alerts.jpg" alt="Alerts page" width="100%">
+      </a>
+      <p align="center"><strong>Alerts</strong></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="assets/live.jpg">
+        <img src="assets/live.jpg" alt="Live logs page" width="100%">
+      </a>
+      <p align="center"><strong>Live Logs</strong></p>
+    </td>
+    <td width="50%">
+      <a href="assets/ip-profile.jpg">
+        <img src="assets/ip-profile.jpg" alt="IP profile page" width="100%">
+      </a>
+      <p align="center"><strong>IP Profile</strong></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="assets/alert-detail.jpg">
+        <img src="assets/alert-detail.jpg" alt="Alert detail page" width="100%">
+      </a>
+      <p align="center"><strong>Alert Detail</strong></p>
+    </td>
+    <td width="50%">
+      <a href="assets/brute-force.jpg">
+        <img src="assets/brute-force.jpg" alt="Brute force detection page" width="100%">
+      </a>
+      <p align="center"><strong>Brute Force Detection</strong></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="assets/timeline.jpg">
+        <img src="assets/timeline.jpg" alt="Attack timeline page" width="100%">
+      </a>
+      <p align="center"><strong>Attack Timeline</strong></p>
+    </td>
+    <td width="50%">
+      <a href="assets/rules.jpg">
+        <img src="assets/rules.jpg" alt="Rules manager page" width="100%">
+      </a>
+      <p align="center"><strong>Rules Manager</strong></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="assets/sources.jpg">
+        <img src="assets/sources.jpg" alt="Log sources page" width="100%">
+      </a>
+      <p align="center"><strong>Log Sources</strong></p>
+    </td>
+    <td width="50%">
+      <a href="assets/reports.jpg">
+        <img src="assets/reports.jpg" alt="Reports page" width="100%">
+      </a>
+      <p align="center"><strong>Reports</strong></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="assets/settings.jpg">
+        <img src="assets/settings.jpg" alt="Settings page" width="100%">
+      </a>
+      <p align="center"><strong>Settings</strong></p>
+    </td>
+    <td width="50%">
+      <p align="center"><em></em></p>
+    </td>
+  </tr>
+</table>
 ---
 
 ## What It Does

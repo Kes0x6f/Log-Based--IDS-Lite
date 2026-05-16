@@ -11,54 +11,91 @@ import (
 	"github.com/Kes0x6f/Log-Based--IDS/internal/model"
 )
 
-// capsetWhitelist contains binaries that legitimately call capset to DROP
-// capabilities as part of normal privilege reduction / sandboxing.
-// These are safe and extremely noisy — suppress them entirely.
+// capsetWhitelist contains exact exe paths that are always safe to suppress.
+// For broad path-prefix suppression, see capsetTrustedPrefixes below.
 var capsetWhitelist = map[string]bool{
-	"/lib/systemd/systemd":                           true,
-	"/usr/lib/systemd/systemd":                       true,
-	"/usr/lib/systemd/systemd-executor":              true, // service launcher — sets caps for each spawned service
-	"/usr/bin/dbus-daemon":                           true,
-	"/usr/sbin/sshd":                                 true,
-	"/usr/bin/ssh":                                   true,
-	"/usr/sbin/polkitd":                              true,
-	"/usr/bin/containerd":                            true,
-	"/usr/bin/dockerd":                               true,
-	"/usr/bin/cron":                                  true,
-	"/usr/sbin/cron":                                 true,
-	"/usr/lib/postfix/master":                        true,
-	"/usr/bin/bash":                                  true,
-	"/usr/bin/sudo":                                  true, // setuid-root binary — full cap set on every invocation
-	"/usr/sbin/sudo":                                 true,
-	"/snap/firefox/8191/usr/lib/firefox/firefox":     true,
-	"/snap/snapd/26865/usr/lib/snapd/snap-confine":   true,
-	"/snap/snapd/26865/usr/lib/snapd/snap-update-ns": true,
-	"/usr/bin/setpriv":                               true,
-	"/usr/libexec/gdm-session-worker":                true,
-	"/usr/sbin/avahi-daemon":                         true,
-	"/usr/sbin/auditctl":                             true,
+	// systemd family
+	"/lib/systemd/systemd":              true,
+	"/usr/lib/systemd/systemd":          true,
+	"/usr/lib/systemd/systemd-executor": true,
+	"/usr/lib/systemd/systemd-udevd":    true,
+	"/usr/lib/systemd/systemd-logind":   true,
+	"/usr/lib/systemd/systemd-networkd": true,
+	"/usr/lib/systemd/systemd-resolved": true,
+	// auth / IPC daemons
+	"/usr/sbin/sshd":         true,
+	"/usr/bin/ssh":           true,
+	"/usr/bin/dbus-daemon":   true,
+	"/usr/sbin/polkitd":      true,
+	"/usr/sbin/avahi-daemon": true,
+	// privilege helpers
+	"/usr/bin/sudo":      true,
+	"/usr/sbin/sudo":     true,
+	"/usr/bin/su":        true,
+	"/usr/bin/newgrp":    true,
+	"/usr/bin/setpriv":   true,
+	"/usr/sbin/auditctl": true,
+	// scheduling / mail
+	"/usr/bin/cron":           true,
+	"/usr/sbin/cron":          true,
+	"/usr/lib/postfix/master": true,
+	// container runtimes
+	"/usr/bin/containerd":              true,
+	"/usr/bin/dockerd":                 true,
+	"/usr/bin/runc":                    true,
+	"/usr/sbin/runc":                   true,
+	"/usr/bin/containerd-shim-runc-v2": true,
+	// desktop session
+	"/usr/libexec/gdm-session-worker": true,
+	"/usr/bin/bash":                   true,
 }
 
-// dangerousCaps are capability bits whose presence warrants CRITICAL severity.
-// Bit positions match Linux capability constants.
+// capsetTrustedPrefixes suppresses any binary whose path starts with one
+// of these prefixes. This catches versioned snap paths, DKMS helpers,
+// and distribution-specific paths without requiring per-version entries.
+//
+// A prefix only silences the rule when the capability set contains NO
+// critical bits (CAP_SETUID, CAP_SYS_ADMIN, CAP_SYS_PTRACE, CAP_SETGID).
+// If a binary under /snap/ somehow gains CAP_SYS_PTRACE it still alerts.
+var capsetTrustedPrefixes = []string{
+	"/usr/lib/snapd/",
+	"/snap/snapd/",
+	"/snap/core", // covers core18, core20, core22 snaps
+	"/var/lib/snapd/",
+}
+
+// dangerousCaps are the ONLY capability bits that will produce an alert.
+// Removing a cap from this map suppresses its alerts entirely — use that
+// to tune noise for your environment.
+//
+// Rationale for each bit kept:
+//
+//	CAP_SETUID (6)      — arbitrary uid switch → root
+//	CAP_SETGID (7)      — arbitrary gid switch → privileged group
+//	CAP_SYS_PTRACE (19) — ptrace any process → credential dump / code injection
+//	CAP_SYS_ADMIN (21)  — almost-root; mount, namespace, eBPF, etc.
+//
+// Deliberately removed from old list (too noisy, not directly exploitable alone):
+//
+//	CAP_CHOWN (0)       — container runtimes set this routinely
+//	CAP_DAC_OVERRIDE(1) — web servers, backup agents, many legitimate tools
+//	CAP_AUDIT_WRITE(38) — logging daemons set this; very common, low risk
 var dangerousCaps = map[int]string{
-	0:  "CAP_CHOWN",
-	1:  "CAP_DAC_OVERRIDE",
 	6:  "CAP_SETUID",
 	7:  "CAP_SETGID",
 	19: "CAP_SYS_PTRACE",
 	21: "CAP_SYS_ADMIN",
-	38: "CAP_AUDIT_WRITE",
 }
 
-type AuditCapsetRule struct {
-	Cooldown time.Duration
-}
+// capsetMinCount is the minimum number of capset calls from a (user, exe)
+// pair within the cooldown window before we alert. A value of 1 fires on
+// the very first call; raise to 2 to absorb one-time process initialisation.
+const capsetMinCount = 2
+
+type AuditCapsetRule struct{}
 
 func NewAuditCapsetRule() *AuditCapsetRule {
-	return &AuditCapsetRule{
-		Cooldown: 30 * time.Minute, // increased from 10 — these are rare genuine events
-	}
+	return &AuditCapsetRule{}
 }
 
 func (r *AuditCapsetRule) Meta() detection.RuleMeta {
@@ -67,11 +104,11 @@ func (r *AuditCapsetRule) Meta() detection.RuleMeta {
 		Program:     "auditd",
 		EventTypes:  []string{"CAPSET"},
 		DisplayName: "Capability Change Detected",
-		Description: "Process dynamically modifies its Linux capability set — privilege escalation without a shell.",
+		Description: "Non-system process dynamically gains CAP_SETUID/SETGID/SYS_PTRACE/SYS_ADMIN — privilege escalation without a shell.",
 		Defaults: detection.RuleDefaults{
 			Threshold:   0,
 			WindowSec:   0,
-			CooldownSec: 1800,
+			CooldownSec: 3600, // 1 hour — genuine events are rare; suppress re-alerts
 		},
 	}
 }
@@ -108,31 +145,42 @@ func (r *AuditCapsetRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 		exe = "unknown"
 	}
 
-	// ── Filter 1: known-safe system binaries ──────────────────────────────
+	// ── Filter 1: exact-path whitelist ────────────────────────────────────
 	if capsetWhitelist[exe] {
 		return nil
 	}
 
-	// ── Filter 2: capability drop to zero is safe ─────────────────────────
-	// event.Message was set by the parser: "cap_prm=<hex> cap_eff=<hex>"
+	// ── Filter 2: capability values — parse first so all later filters can use them
 	capPrm, capEff := parseCapFields(event.Message)
-	combined := capPrm | capEff
-	capNames := decodeCapBits(combined)
 
-	isCapDrop := capPrm == 0 && capEff == 0
-	if isCapDrop {
-		// Dropping all capabilities is the normal security-hardening pattern.
-		// Only alert if it comes from an unknown binary (belt-and-suspenders).
+	// ── Filter 3: only alert when at least one dangerous cap is EFFECTIVE ──
+	// cap_eff (effective) is what the kernel actually enforces for each syscall.
+	// cap_prm (permitted) is the ceiling — a process can hold permitted caps
+	// without exercising them. Many legitimate processes raise permitted caps
+	// during initialisation but never set them effective.
+	// Alert only when a dangerous cap appears in the EFFECTIVE set.
+	dangerousEffective := capEff & dangerousCapMask()
+	if dangerousEffective == 0 {
+		// No dangerous cap is currently effective — harmless cap management.
 		return nil
 	}
 
-	// ── Filter 3: no capability data from parser — unknown but suspicious ─
-	// If the parser couldn't extract cap values, still alert but at MEDIUM
-	// so genuine unknown binaries don't go silently unnoticed.
+	// ── Filter 4: trusted path prefixes for non-critical binaries ─────────
+	// Even if a snap or snapd helper briefly holds a dangerous cap during
+	// confined execution, suppress it — snap-confine grants and revokes caps
+	// as part of its normal confinement protocol.
+	for _, prefix := range capsetTrustedPrefixes {
+		if strings.HasPrefix(exe, prefix) {
+			return nil
+		}
+	}
 
-	// ── Determine severity based on which caps are being set ──────────────
-	severity, _ := classifyCapabilities(combined)
+	// ── Filter 5: full capability drop (cap_prm=0 AND cap_eff=0) is safe ──
+	if capPrm == 0 && capEff == 0 {
+		return nil
+	}
 
+	// ── Count & cooldown ──────────────────────────────────────────────────
 	s := getAuditCapsetState(ctx)
 	key := user + ":" + exe
 	s.countByKey[key]++
@@ -151,33 +199,46 @@ func (r *AuditCapsetRule) Evaluate(event *model.NormalizedEvent, ctx *context.De
 		return nil
 	}
 
-	s.countByKey[key] = 1
-
-	if len(capNames) > 0 {
-		event.ThreatDetail = "caps:" + strings.Join(capNames, ",")
-	} else {
-		event.ThreatDetail = fmt.Sprintf("cap_prm:0x%x cap_eff:0x%x", capPrm, capEff)
+	// ── Filter 6: require N calls before alerting ─────────────────────────
+	// Absorbs one-time capability grants during process start-up. Most
+	// legitimate daemons call capset exactly once as they initialise and
+	// are already covered by the whitelist; requiring 2 hits before alerting
+	// suppresses the remaining one-shot initialisation noise from unlisted
+	// binaries without hiding a real attack (which generates repeated calls).
+	if count < capsetMinCount {
+		return nil
 	}
 
-	capDisplay := event.ThreatDetail
-	msg := fmt.Sprintf(
-		"%s gained capabilities at runtime (user: %s) — %s",
-		exe, user, capDisplay,
-	)
+	// ── Build alert ───────────────────────────────────────────────────────
+	capNames := decodeEffectiveDangerousCaps(dangerousEffective)
+	event.ThreatDetail = "caps:" + strings.Join(capNames, ",")
 
 	alert := model.NewAlert(
 		"Capability Change Detected",
-		severity,
+		model.SeverityCritical, // only dangerous effective caps reach here
 		"privilege-escalation",
-		msg,
+		fmt.Sprintf("%s gained %s at runtime (user: %s)", exe, strings.Join(capNames, "+"), user),
 		event,
 		count,
 	)
 
 	s.lastAlertByKey[key] = now
 	s.lastAlertID[key] = alert.ID
+	s.countByKey[key] = 0 // reset after alert so next window starts fresh
 
 	return []*model.Alert{alert}
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+// dangerousCapMask returns a bitmask covering all bits in dangerousCaps.
+// Computed once per call; cheap enough for the hot path.
+func dangerousCapMask() uint64 {
+	var mask uint64
+	for bit := range dangerousCaps {
+		mask |= 1 << uint(bit)
+	}
+	return mask
 }
 
 // parseCapFields reads "cap_prm=<hex> cap_eff=<hex>" from Message.
@@ -202,31 +263,13 @@ func parseCapFields(msg string) (capPrm uint64, capEff uint64) {
 	return
 }
 
-// classifyCapabilities returns severity and a human-readable cap name for the
-// most dangerous capability bit present in the combined set.
-// Falls back to HIGH + empty name when no specifically dangerous bit is set
-// but capabilities are non-zero.
-func classifyCapabilities(combined uint64) (model.Severity, string) {
-	for bit, name := range dangerousCaps {
-		if combined&(1<<uint(bit)) != 0 {
-			return model.SeverityCritical, name
-		}
-	}
-	if combined != 0 {
-		return model.SeverityHigh, ""
-	}
-	return model.SeverityMedium, ""
-}
-
-func decodeCapBits(combined uint64) []string {
+// decodeEffectiveDangerousCaps returns the names of dangerous caps set in mask.
+func decodeEffectiveDangerousCaps(mask uint64) []string {
 	var names []string
 	for bit, name := range dangerousCaps {
-		if combined&(1<<uint(bit)) != 0 {
+		if mask&(1<<uint(bit)) != 0 {
 			names = append(names, name)
 		}
-	}
-	if len(names) == 0 && combined != 0 {
-		names = []string{fmt.Sprintf("bits:0x%x", combined)}
 	}
 	return names
 }
